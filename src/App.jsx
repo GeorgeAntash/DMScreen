@@ -960,9 +960,426 @@ const MapWidget = ({ mapUrl, setMapUrl, notes, setNotes }) => {
     );
 };
 
-const HexDetailWindowContent = ({ hexes, hexIndex, updateHex, tables, openWindow }) => {
+const EncounterManager = ({ savedEncounters, setSavedEncounters }) => {
+    const [name, setName] = useState('');
+    const [difficulty, setDifficulty] = useState('Moderate');
+    const [notes, setNotes] = useState('');
+
+    const addEncounter = () => {
+        if (!name.trim()) return;
+        setSavedEncounters(prev => [
+            { id: Date.now(), name: name.trim(), difficulty, notes: notes.trim() },
+            ...prev
+        ]);
+        setName('');
+        setDifficulty('Moderate');
+        setNotes('');
+    };
+
+    const deleteEncounter = (id) => {
+        setSavedEncounters(prev => prev.filter(encounter => encounter.id !== id));
+    };
+
+    return (
+        <div className="h-full flex flex-col gap-4">
+            <div className="bg-gray-900/60 border border-gray-700 rounded p-3 space-y-3">
+                <div className="text-xs uppercase tracking-wide text-gray-400 font-bold">Create Encounter</div>
+                <div className="grid grid-cols-1 gap-2">
+                    <input
+                        className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-white focus:border-red-500 outline-none"
+                        placeholder="Encounter name..."
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                    />
+                    <select
+                        className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-white focus:border-red-500 outline-none"
+                        value={difficulty}
+                        onChange={(e) => setDifficulty(e.target.value)}
+                    >
+                        <option value="Easy">Easy</option>
+                        <option value="Moderate">Moderate</option>
+                        <option value="Hard">Hard</option>
+                        <option value="Deadly">Deadly</option>
+                    </select>
+                    <textarea
+                        className="w-full h-24 bg-gray-900 border border-gray-700 rounded p-2 text-xs text-gray-300 resize-none focus:outline-none focus:border-red-500"
+                        placeholder="Encounter notes, foes, twists..."
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                    />
+                    <button onClick={addEncounter} className="bg-red-600 hover:bg-red-500 text-white text-xs font-bold px-3 py-2 rounded">
+                        Save Encounter
+                    </button>
+                </div>
+            </div>
+            <div className="flex-1 overflow-y-auto space-y-2">
+                {savedEncounters.length === 0 && (
+                    <div className="text-center text-gray-500 text-sm italic mt-8">No saved encounters yet.</div>
+                )}
+                {savedEncounters.map(encounter => (
+                    <div key={encounter.id} className="bg-gray-800 border border-gray-700 rounded p-3 space-y-2">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <div className="text-sm font-bold text-gray-200">{encounter.name}</div>
+                                <div className="text-[10px] uppercase text-red-400 font-bold">{encounter.difficulty}</div>
+                            </div>
+                            <button onClick={() => deleteEncounter(encounter.id)} className="text-gray-400 hover:text-red-400">
+                                <Trash2 size={14}/>
+                            </button>
+                        </div>
+                        {encounter.notes && (
+                            <div className="text-xs text-gray-400 whitespace-pre-wrap">{encounter.notes}</div>
+                        )}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+const BestiaryPickerWindowContent = ({ library, onPick, close }) => {
+    const [search, setSearch] = useState('');
+    const [selected, setSelected] = useState([]);
+
+    const [typeFilter, setTypeFilter] = useState('All');
+    const [tierFilter, setTierFilter] = useState('All');
+    const [creatureFilter, setCreatureFilter] = useState('All');
+    const [biomeFilter, setBiomeFilter] = useState('All');
+
+    const filtered = library.filter(adv => {
+        const matchesSearch = adv.name.toLowerCase().includes(search.toLowerCase()) || adv.tags.toLowerCase().includes(search.toLowerCase());
+        const matchesType = typeFilter === 'All' || adv.type === typeFilter;
+        const matchesTier = tierFilter === 'All' || adv.tier === tierFilter;
+        const matchesCreature = creatureFilter === 'All' || adv.creatureType === creatureFilter;
+        const matchesBiome = biomeFilter === 'All' || adv.biome === biomeFilter;
+        return matchesSearch && matchesType && matchesTier && matchesCreature && matchesBiome;
+    });
+
+    const addToSelected = (adv) => {
+        setSelected(prev => {
+            const existing = prev.find(p => p.id === adv.id);
+            if (existing) {
+                return prev.map(p => p.id === adv.id ? { ...p, count: p.count + 1 } : p);
+            }
+            return [...prev, { ...adv, count: 1 }];
+        });
+    };
+
+    const removeFromSelected = (advId) => {
+        setSelected(prev => {
+            const existing = prev.find(p => p.id === advId);
+            if (existing.count > 1) {
+                return prev.map(p => p.id === advId ? { ...p, count: p.count - 1 } : p);
+            }
+            return prev.filter(p => p.id !== advId);
+        });
+    };
+
+    const confirmSelection = () => {
+        const enemiesToAdd = selected.flatMap(s =>
+            Array.from({length: s.count}).map(() => ({ ...s }))
+        );
+
+        onPick(enemiesToAdd);
+        close();
+    };
+
+    return (
+        <div className="h-full flex gap-4">
+            <div className="flex-1 flex flex-col min-w-0">
+                <div className="flex flex-col gap-2 mb-2">
+                    <input className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)}/>
+                    <div className="flex gap-1 flex-wrap">
+                        <select className="bg-gray-800 border border-gray-700 rounded text-xs px-1 py-1 text-gray-300" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}><option value="All">All Types</option>{ADVERSARY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                        <select className="bg-gray-800 border border-gray-700 rounded text-xs px-1 py-1 text-gray-300" value={tierFilter} onChange={e => setTierFilter(e.target.value)}><option value="All">All Tiers</option>{[0,1,2,3,4].map(t => <option key={t} value={String(t)}>Tier {t}</option>)}</select>
+                        <select className="bg-gray-800 border border-gray-700 rounded text-xs px-1 py-1 text-gray-300" value={creatureFilter} onChange={e => setCreatureFilter(e.target.value)}><option value="All">All Creatures</option>{CREATURE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                        <select className="bg-gray-800 border border-gray-700 rounded text-xs px-1 py-1 text-gray-300" value={biomeFilter} onChange={e => setBiomeFilter(e.target.value)}><option value="All">All Biomes</option>{BIOMES.map(b => <option key={b} value={b}>{b}</option>)}</select>
+                    </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto min-h-0 space-y-2 pr-1">
+                    {filtered.map(adv => (
+                        <div key={adv.id} onClick={() => addToSelected(adv)} className="bg-gray-800 hover:bg-gray-700 p-2 rounded cursor-pointer border border-gray-700 flex justify-between items-center group">
+                            <div>
+                                <div className="font-bold text-sm">{adv.name}</div>
+                                <div className="text-[10px] text-gray-400">{adv.type} • Tier {adv.tier}</div>
+                            </div>
+                            <div className="text-xs font-bold text-indigo-400 flex items-center gap-2">
+                                {adv.difficulty} <Plus size={14} className="opacity-0 group-hover:opacity-100"/>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            <div className="w-1/3 bg-gray-900 border-l border-gray-800 pl-4 flex flex-col">
+                <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">Selected Squad</h4>
+                <div className="flex-1 overflow-y-auto space-y-2 mb-4">
+                    {selected.map(s => (
+                        <div key={s.id} className="flex justify-between items-center bg-black/20 p-2 rounded">
+                            <span className="text-sm font-bold truncate">{s.name}</span>
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => removeFromSelected(s.id)} className="text-gray-500 hover:text-white"><Minus size={12}/></button>
+                                <span className="text-xs font-mono">{s.count}</span>
+                                <button onClick={() => addToSelected(s)} className="text-gray-500 hover:text-white"><Plus size={12}/></button>
+                            </div>
+                        </div>
+                    ))}
+                    {selected.length === 0 && <div className="text-xs text-gray-600 italic text-center mt-4">No adversaries selected.</div>}
+                </div>
+                <button
+                    onClick={confirmSelection}
+                    disabled={selected.length === 0}
+                    className={`w-full py-2 rounded font-bold text-sm ${selected.length > 0 ? 'bg-indigo-600 hover:bg-indigo-500 text-white' : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}
+                >
+                    Add to Combat
+                </button>
+            </div>
+        </div>
+    );
+};
+
+const AdversaryBuilderWindow = ({ onSave, initialData, close }) => {
+    const [data, setData] = useState(initialData || {
+        id: Date.now(),
+        name: '',
+        tier: '0',
+        type: 'Standard',
+        creatureType: 'Humanoid',
+        biome: 'Plains',
+        tags: '',
+        difficulty: '10',
+        experiences: '',
+        motives: '',
+        attacks: [],
+        hp: '1',
+        stress: '0',
+        thresholds: { major: '', severe: '' },
+        features: [],
+        environment: false
+    });
+
+    const handleSave = () => { onSave(data); close(); };
+    const addAttack = () => setData({...data, attacks: [...data.attacks, { id: Date.now(), name: '', range: 'Melee', mod: '', damage: '' }]});
+    const updateAttack = (id, field, value) => setData({...data, attacks: data.attacks.map(atk => atk.id === id ? { ...atk, [field]: value } : atk)});
+    const deleteAttack = (id) => setData({...data, attacks: data.attacks.filter(atk => atk.id !== id)});
+
+    const addFeature = () => setData({...data, features: [...data.features, { id: Date.now(), name: '', type: 'Action', description: '', flavorText: '', fearCost: '', stressCost: '', hpCost: '', maxUses: '', passiveValue: '' }]});
+    const updateFeature = (id, field, value) => setData({...data, features: data.features.map(f => f.id === id ? { ...f, [field]: value } : f)});
+    const deleteFeature = (id) => setData({...data, features: data.features.filter(f => f.id !== id)});
+
+    return (
+        <div className="h-full flex flex-col gap-4">
+            <div className="dh-card p-4 flex-1 overflow-y-auto min-h-0">
+                <div className="flex gap-4 mb-4">
+                    <div className="flex-1">
+                        <label className="text-[10px] uppercase text-gray-500 font-bold">Name</label>
+                        <input className="w-full bg-transparent text-xl font-bold text-white border-b border-gray-600 focus:border-red-500 outline-none" value={data.name} onChange={e => setData({...data, name: e.target.value})} placeholder="Adversary Name"/>
+                    </div>
+                    <div className="w-20">
+                        <label className="text-[10px] uppercase text-gray-500 font-bold">Tier</label>
+                        <select className="w-full bg-transparent text-xl font-bold text-white border-b border-gray-600 focus:border-red-500 outline-none text-center" value={data.tier} onChange={e => setData({...data, tier: e.target.value})}>
+                            {[0,1,2,3,4].map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                    <div><label className="text-[9px] uppercase text-gray-500 font-bold">Adversary Type</label><select className="w-full bg-gray-800 text-xs p-2 rounded border border-gray-700 text-gray-300" value={data.type} onChange={e => setData({...data, type: e.target.value})}>{ADVERSARY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                    <div><label className="text-[9px] uppercase text-gray-500 font-bold">Creature Type</label><select className="w-full bg-gray-800 text-xs p-2 rounded border border-gray-700 text-gray-300" value={data.creatureType} onChange={e => setData({...data, creatureType: e.target.value})}>{CREATURE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                    <div><label className="text-[9px] uppercase text-gray-500 font-bold">Biome</label><select className="w-full bg-gray-800 text-xs p-2 rounded border border-gray-700 text-gray-300" value={data.biome} onChange={e => setData({...data, biome: e.target.value})}>{BIOMES.map(b => <option key={b} value={b}>{b}</option>)}</select></div>
+                    <div><label className="text-[9px] uppercase text-gray-500 font-bold">Tags</label><input className="w-full bg-gray-800 text-xs p-2 rounded border border-gray-700 text-gray-300" placeholder="e.g. Skeleton, Trap" value={data.tags} onChange={e => setData({...data, tags: e.target.value})}/></div>
+                </div>
+
+                <div className="grid grid-cols-4 gap-3 mb-6">
+                    <div className="col-span-1 dh-stat-box"><div className="text-[9px] uppercase text-gray-500 font-bold mb-1">Difficulty</div><input className="w-full bg-transparent text-center font-bold text-lg text-white" value={data.difficulty} onChange={e => setData({...data, difficulty: e.target.value})} placeholder="12"/></div>
+                    <div className="col-span-1 dh-stat-box"><div className="text-[9px] uppercase text-gray-500 font-bold mb-1">Attack Mod</div><input className="w-full bg-transparent text-center font-bold text-lg text-red-400" value={data.attack} onChange={e => setData({...data, attack: e.target.value})} placeholder="+0"/></div>
+                    <div className="col-span-2 bg-gray-900/50 p-2 rounded border border-gray-700"><label className="text-[9px] uppercase text-gray-500 font-bold block mb-1">Experiences</label><textarea className="w-full bg-transparent text-sm text-gray-300 resize-none h-12 focus:outline-none" value={data.experiences} onChange={e => setData({...data, experiences: e.target.value})} placeholder="Alertness +2, Sneaky +1..."/></div>
+                </div>
+
+                 <div className="mb-4 bg-gray-900/50 p-2 rounded border border-gray-700">
+                    <label className="text-[9px] uppercase text-gray-500 font-bold block mb-1">Motives & Tactics</label>
+                    <textarea className="w-full bg-transparent text-sm text-gray-300 resize-none h-16 focus:outline-none" value={data.motives} onChange={e => setData({...data, motives: e.target.value})} placeholder="To protect the queen..."/>
+                 </div>
+
+                <div className="mb-6">
+                    <div className="flex justify-between items-center mb-2"><label className="text-[10px] uppercase text-gray-500 font-bold">Attacks & Weapons</label><button onClick={addAttack} className="text-[10px] bg-red-900 hover:bg-red-800 text-red-200 px-2 py-1 rounded flex items-center gap-1">+ Add Attack</button></div>
+                    <div className="space-y-2">
+                        {data.attacks.map(atk => (
+                            <div key={atk.id} className="grid grid-cols-12 gap-2 items-center bg-gray-800 p-2 rounded border border-gray-700">
+                                <input className="col-span-4 bg-transparent border-b border-gray-600 text-sm text-white focus:border-red-500 outline-none" placeholder="Weapon Name" value={atk.name} onChange={e => updateAttack(atk.id, 'name', e.target.value)} />
+                                <select className="col-span-3 bg-transparent border-b border-gray-600 text-xs text-gray-400 focus:border-red-500 outline-none" value={atk.range} onChange={e => updateAttack(atk.id, 'range', e.target.value)}>{ATTACK_RANGES.map(r => <option key={r} value={r}>{r}</option>)}</select>
+                                <input className="col-span-2 bg-transparent border-b border-gray-600 text-sm text-red-300 font-bold focus:border-red-500 outline-none text-center" placeholder="+3" value={atk.mod} onChange={e => updateAttack(atk.id, 'mod', e.target.value)} />
+                                <input className="col-span-2 bg-transparent border-b border-gray-600 text-sm text-gray-200 focus:border-red-500 outline-none text-right" placeholder="1d8+2" value={atk.damage} onChange={e => updateAttack(atk.id, 'damage', e.target.value)} />
+                                <button onClick={() => deleteAttack(atk.id)} className="col-span-1 text-gray-600 hover:text-red-500 flex justify-center"><Trash2 size={12}/></button>
+                            </div>
+                        ))}
+                        {data.attacks.length === 0 && <div className="text-xs text-gray-600 italic text-center p-2">No attacks added.</div>}
+                    </div>
+                </div>
+
+                <div className="bg-gray-900/50 p-3 rounded border border-gray-700 mb-6">
+                    <label className="text-[10px] uppercase text-gray-500 font-bold mb-2 block">Damage Thresholds & Health</label>
+                    <div className="grid grid-cols-2 gap-4 mb-2">
+                        <div className="text-center"><span className="block text-[9px] text-gray-500">Major</span><input className="w-full bg-gray-800 border border-gray-600 rounded text-center text-sm" value={data.thresholds.major} onChange={e => setData({...data, thresholds: {...data.thresholds, major: e.target.value}})} placeholder="X"/></div>
+                        <div className="text-center"><span className="block text-[9px] text-gray-500">Severe</span><input className="w-full bg-gray-800 border border-gray-600 rounded text-center text-sm" value={data.thresholds.severe} onChange={e => setData({...data, thresholds: {...data.thresholds, severe: e.target.value}})} placeholder="Y+"/></div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 border-t border-gray-700 pt-2 mt-2">
+                        <div className="flex items-center justify-between"><span className="text-xs text-gray-400 font-bold">Hit Points</span><input className="w-16 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-center font-bold text-white" value={data.hp} onChange={e => setData({...data, hp: e.target.value})} /></div>
+                        <div className="flex items-center justify-between"><span className="text-xs text-purple-400 font-bold">Stress</span><input className="w-16 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-center font-bold text-white" value={data.stress} onChange={e => setData({...data, stress: e.target.value})} /></div>
+                    </div>
+                </div>
+
+                <div>
+                    <div className="flex justify-between items-center mb-2"><label className="text-[10px] uppercase text-gray-500 font-bold">Moves & Features</label><button onClick={addFeature} className="text-[10px] bg-indigo-900 hover:bg-indigo-800 text-indigo-200 px-2 py-1 rounded flex items-center gap-1">+ Add Feature</button></div>
+                    <div className="space-y-2">
+                        {(data.features || []).map(f => (
+                            <div key={f.id} className="dh-feature-row relative group p-2 bg-gray-900/30 border border-indigo-900/30 rounded">
+                                <div className="flex gap-2 mb-2 items-center">
+                                    <input className="bg-transparent font-bold text-sm text-indigo-300 focus:outline-none flex-1" placeholder="Feature Name" value={f.name} onChange={e => updateFeature(f.id, 'name', e.target.value)} />
+                                    <select className="bg-gray-900 border border-indigo-900/50 text-[10px] text-gray-400 rounded px-1" value={f.type} onChange={e => updateFeature(f.id, 'type', e.target.value)}>
+                                        {FEATURE_TYPES.map(ft => <option key={ft} value={ft}>{ft}</option>)}
+                                    </select>
+                                    {f.type === 'Passive' && (
+                                        <input
+                                            className="w-16 bg-transparent text-xs text-center border-b border-indigo-900/50 focus:border-indigo-500 outline-none text-indigo-200"
+                                            placeholder="Value"
+                                            value={f.passiveValue || ''}
+                                            onChange={e => updateFeature(f.id, 'passiveValue', e.target.value)}
+                                        />
+                                    )}
+                                </div>
+                                <input className="w-full bg-transparent text-xs text-gray-500 italic mb-1 focus:outline-none border-b border-transparent focus:border-gray-700" placeholder="Flavor Text (Optional)..." value={f.flavorText || ''} onChange={e => updateFeature(f.id, 'flavorText', e.target.value)} />
+                                <textarea className="w-full bg-transparent text-xs text-gray-300 resize-none h-16 focus:outline-none mb-2" placeholder="Mechanics description..." value={f.description} onChange={e => updateFeature(f.id, 'description', e.target.value)} />
+                                <div className="flex gap-3 items-center bg-black/20 p-1 rounded">
+                                    <div className="flex items-center gap-1" title="Fear Cost"><Skull size={10} className="text-purple-400"/><input className="w-6 bg-transparent text-xs text-center border-b border-gray-700 focus:border-purple-500 outline-none text-purple-200" placeholder="-" value={f.fearCost || ''} onChange={e => updateFeature(f.id, 'fearCost', e.target.value)} /></div>
+                                    <div className="flex items-center gap-1" title="Stress Cost"><Activity size={10} className="text-gray-400"/><input className="w-6 bg-transparent text-xs text-center border-b border-gray-700 focus:border-white outline-none text-gray-200" placeholder="-" value={f.stressCost || ''} onChange={e => updateFeature(f.id, 'stressCost', e.target.value)} /></div>
+                                    <div className="flex items-center gap-1" title="HP Cost"><div className="text-[10px] text-red-400 font-bold">HP</div><input className="w-6 bg-transparent text-xs text-center border-b border-gray-700 focus:border-red-500 outline-none text-red-200" placeholder="-" value={f.hpCost || ''} onChange={e => updateFeature(f.id, 'hpCost', e.target.value)} /></div>
+                                    <div className="flex items-center gap-1 ml-auto"><span className="text-[9px] text-gray-500 uppercase">Uses</span><input className="w-16 bg-transparent text-xs text-right border-b border-gray-700 focus:border-yellow-500 outline-none text-yellow-200" placeholder="e.g. 1/Scene" value={f.maxUses || ''} onChange={e => updateFeature(f.id, 'maxUses', e.target.value)} /></div>
+                                </div>
+                                <button onClick={() => deleteFeature(f.id)} className="absolute top-1 right-1 text-gray-600 hover:text-red-500 opacity-0 group-hover:opacity-100"><Trash2 size={12}/></button>
+                            </div>
+                        ))}
+                        {(data.features || []).length === 0 && <div className="text-xs text-gray-600 italic text-center p-2">No features added.</div>}
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex justify-end gap-2 flex-shrink-0">
+                <button onClick={close} className="px-4 py-2 rounded border border-gray-600 text-gray-400 hover:text-white">Cancel</button>
+                <button onClick={handleSave} className="px-4 py-2 rounded bg-red-700 hover:bg-red-600 text-white font-bold flex items-center gap-2"><Save size={16}/> Save Adversary</button>
+            </div>
+        </div>
+    );
+};
+
+const BestiaryWindowContent = ({ library, setLibrary, openWindow }) => {
+    const [search, setSearch] = useState('');
+    const [typeFilter, setTypeFilter] = useState('All');
+    const [tierFilter, setTierFilter] = useState('All');
+    const [creatureFilter, setCreatureFilter] = useState('All');
+    const [biomeFilter, setBiomeFilter] = useState('All');
+    const [sortOrder, setSortOrder] = useState('none');
+
+    const filtered = library.filter(adv => {
+        const matchesSearch = adv.name.toLowerCase().includes(search.toLowerCase()) || adv.tags.toLowerCase().includes(search.toLowerCase());
+        const matchesType = typeFilter === 'All' || adv.type === typeFilter;
+        const matchesTier = tierFilter === 'All' || adv.tier === tierFilter;
+        const matchesCreature = creatureFilter === 'All' || adv.creatureType === creatureFilter;
+        const matchesBiome = biomeFilter === 'All' || adv.biome === biomeFilter;
+        return matchesSearch && matchesType && matchesTier && matchesCreature && matchesBiome;
+    }).sort((a, b) => {
+        if (sortOrder === 'none') return 0;
+        const diffA = parseInt(a.difficulty) || 0;
+        const diffB = parseInt(b.difficulty) || 0;
+        return sortOrder === 'asc' ? diffA - diffB : diffB - diffA;
+    });
+
+    const handleSaveAdversary = (savedAdv) => {
+        setLibrary(prev => {
+            const idx = prev.findIndex(a => a.id === savedAdv.id);
+            if (idx >= 0) {
+                const newLib = [...prev];
+                newLib[idx] = savedAdv;
+                return newLib;
+            } else {
+                return [...prev, savedAdv];
+            }
+        });
+    };
+
+    const toggleSort = () => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+
+    return (
+        <div className="h-full flex flex-col">
+            <div className="flex flex-col gap-2 mb-4 bg-gray-900/50 p-2 rounded border border-gray-800 flex-shrink-0">
+                <div className="relative w-full">
+                    <Search size={14} className="absolute top-2.5 left-2 text-gray-500"/>
+                    <input className="w-full bg-gray-800 border border-gray-700 rounded pl-8 py-1.5 text-sm text-white focus:border-indigo-500 outline-none" placeholder="Search adversaries..." value={search} onChange={e => setSearch(e.target.value)}/>
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                    <select className="bg-gray-800 border border-gray-700 rounded text-xs px-2 py-1 text-gray-300" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}><option value="All">All Types</option>{ADVERSARY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                    <select className="bg-gray-800 border border-gray-700 rounded text-xs px-2 py-1 text-gray-300" value={tierFilter} onChange={e => setTierFilter(e.target.value)}><option value="All">All Tiers</option>{[0,1,2,3,4].map(t => <option key={t} value={String(t)}>Tier {t}</option>)}</select>
+                    <select className="bg-gray-800 border border-gray-700 rounded text-xs px-2 py-1 text-gray-300" value={creatureFilter} onChange={e => setCreatureFilter(e.target.value)}><option value="All">All Creatures</option>{CREATURE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                    <select className="bg-gray-800 border border-gray-700 rounded text-xs px-2 py-1 text-gray-300" value={biomeFilter} onChange={e => setBiomeFilter(e.target.value)}><option value="All">All Biomes</option>{BIOMES.map(b => <option key={b} value={b}>{b}</option>)}</select>
+                    <button onClick={toggleSort} className="bg-gray-800 border border-gray-700 hover:bg-gray-700 text-gray-300 px-2 py-1 rounded flex items-center gap-1 text-xs" title="Sort Difficulty">{sortOrder === 'asc' ? <ArrowUp size={12}/> : <ArrowDown size={12}/>} Diff</button>
+                    <button onClick={() => openWindow('ADV_BUILDER', { onSave: handleSaveAdversary }, 'New Adversary')} className="bg-green-700 hover:bg-green-600 text-white px-3 py-1 rounded flex items-center gap-1 text-xs font-bold ml-auto"><Plus size={14}/> Create</button>
+                </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto min-h-0 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {filtered.map(adv => (
+                    <div key={adv.id} className="bg-gray-800 border border-gray-700 rounded p-3 hover:border-indigo-500 transition-colors cursor-pointer group relative">
+                        <div className="flex justify-between items-start mb-1">
+                            <div><h4 className="font-bold text-white text-sm">{adv.name}</h4><div className="flex gap-1 mt-1"><span className="text-[9px] text-gray-400 bg-gray-900 px-1 py-0.5 rounded border border-gray-700">{adv.type}</span><span className="text-[9px] text-gray-400 bg-gray-900 px-1 py-0.5 rounded border border-gray-700">Tier {adv.tier}</span></div></div>
+                            <div className="text-right"><div className="text-[9px] text-gray-500 uppercase font-bold">Diff</div><div className="text-sm font-bold text-indigo-400">{adv.difficulty}</div></div>
+                        </div>
+                        <div className="flex flex-wrap gap-1 mb-2">
+                            {adv.creatureType && <span className="text-[9px] text-blue-300 bg-blue-900/30 px-1 rounded">{adv.creatureType}</span>}
+                            {adv.biome && <span className="text-[9px] text-green-300 bg-green-900/30 px-1 rounded">{adv.biome}</span>}
+                        </div>
+                        <p className="text-xs text-gray-500 italic truncate mb-2">{adv.tags}</p>
+                        <div className="flex flex-col gap-1 mb-2">
+                            {(adv.attacks || []).slice(0, 2).map(atk => (<div key={atk.id} className="flex justify-between text-xs text-gray-300 bg-gray-900/50 p-1 rounded"><span className="font-bold truncate w-20">{atk.name}</span><span className="text-red-400">{atk.mod}</span><span className="text-gray-400">{atk.damage}</span></div>))}
+                            {(adv.attacks || []).length > 2 && <span className="text-[9px] text-gray-500">+{adv.attacks.length - 2} more...</span>}
+                        </div>
+                        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={(e) => { e.stopPropagation(); openWindow('ADV_BUILDER', { onSave: handleSaveAdversary, initialData: adv }, `Edit ${adv.name}`); }} className="text-gray-400 hover:text-white hover:bg-gray-700 p-1 rounded"><Pencil size={12}/></button>
+                            <button onClick={(e) => { e.stopPropagation(); if(window.confirm("Delete this adversary?")) setLibrary(library.filter(l => l.id !== adv.id)); }} className="text-red-500 hover:bg-red-900/20 p-1 rounded"><Trash2 size={12}/></button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+const HexDetailWindowContent = ({ hexes, hexIndex, updateHex, tables, openWindow, savedEncounters }) => {
     const hex = hexes[hexIndex];
     const [activeTab, setActiveTab] = useState('details');
+    const [selectedEncounterId, setSelectedEncounterId] = useState('');
+    const [quickEncounterName, setQuickEncounterName] = useState('');
+    const [quickEncounterNotes, setQuickEncounterNotes] = useState('');
+
+    const addEncounterToHex = (encounter) => {
+        const updated = [
+            ...(hex.encounters || []),
+            {
+                instanceId: Date.now(),
+                source: encounter.source,
+                id: encounter.id,
+                name: encounter.name,
+                difficulty: encounter.difficulty,
+                notes: encounter.notes || ''
+            }
+        ];
+        updateHex(hexIndex, 'encounters', updated);
+    };
+
+    const removeEncounterFromHex = (instanceId) => {
+        const updated = (hex.encounters || []).filter(encounter => encounter.instanceId !== instanceId);
+        updateHex(hexIndex, 'encounters', updated);
+    };
 
     if (!hex) return <div>Hex Not Found</div>;
 
@@ -1019,8 +1436,89 @@ const HexDetailWindowContent = ({ hexes, hexIndex, updateHex, tables, openWindow
             )}
             {activeTab === 'encounters' && (
                 <div className="flex-1 flex flex-col gap-4 overflow-y-auto">
-                    <div className="text-center text-gray-500 italic text-sm py-8">
-                        Encounter tables coming soon...
+                    <div className="bg-gray-900/60 border border-gray-700 rounded p-3 space-y-3">
+                        <div className="text-xs uppercase tracking-wide text-gray-400 font-bold">Add from Library</div>
+                        <div className="flex gap-2">
+                            <select
+                                className="flex-1 bg-gray-900 border border-gray-700 rounded p-2 text-sm text-white focus:border-red-500 outline-none"
+                                value={selectedEncounterId}
+                                onChange={(e) => setSelectedEncounterId(e.target.value)}
+                            >
+                                <option value="">Select an encounter...</option>
+                                {savedEncounters.map(encounter => (
+                                    <option key={encounter.id} value={encounter.id}>{encounter.name}</option>
+                                ))}
+                            </select>
+                            <button
+                                onClick={() => {
+                                    const encounter = savedEncounters.find(item => item.id === Number(selectedEncounterId));
+                                    if (encounter) {
+                                        addEncounterToHex({ ...encounter, source: 'library' });
+                                        setSelectedEncounterId('');
+                                    }
+                                }}
+                                className="bg-red-600 hover:bg-red-500 text-white text-xs font-bold px-3 rounded"
+                            >
+                                Add
+                            </button>
+                        </div>
+                        {savedEncounters.length === 0 && (
+                            <div className="text-[11px] text-gray-500 italic">No encounters saved yet. Use the Encounter Builder to create some.</div>
+                        )}
+                    </div>
+                    <div className="bg-gray-900/60 border border-gray-700 rounded p-3 space-y-3">
+                        <div className="text-xs uppercase tracking-wide text-gray-400 font-bold">Quick Encounter</div>
+                        <input
+                            className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-white focus:border-red-500 outline-none"
+                            placeholder="Encounter name..."
+                            value={quickEncounterName}
+                            onChange={(e) => setQuickEncounterName(e.target.value)}
+                        />
+                        <textarea
+                            className="w-full h-20 bg-gray-900 border border-gray-700 rounded p-2 text-xs text-gray-300 resize-none focus:outline-none focus:border-red-500"
+                            placeholder="Notes, foes, twists..."
+                            value={quickEncounterNotes}
+                            onChange={(e) => setQuickEncounterNotes(e.target.value)}
+                        />
+                        <button
+                            onClick={() => {
+                                if (!quickEncounterName.trim()) return;
+                                addEncounterToHex({
+                                    source: 'custom',
+                                    id: null,
+                                    name: quickEncounterName.trim(),
+                                    difficulty: 'Custom',
+                                    notes: quickEncounterNotes.trim()
+                                });
+                                setQuickEncounterName('');
+                                setQuickEncounterNotes('');
+                            }}
+                            className="bg-red-600 hover:bg-red-500 text-white text-xs font-bold px-3 py-2 rounded"
+                        >
+                            Add to Hex
+                        </button>
+                    </div>
+                    <div className="space-y-2">
+                        {(hex.encounters || []).length === 0 && (
+                            <div className="text-center text-gray-600 text-xs italic mt-4">No encounters assigned to this hex yet.</div>
+                        )}
+                        {(hex.encounters || []).map(encounter => (
+                            <div key={encounter.instanceId} className="bg-gray-800 border border-gray-700 p-2 rounded space-y-1">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <div className="font-bold text-sm text-gray-200">{encounter.name}</div>
+                                        <div className="text-[10px] text-red-400 uppercase font-bold">{encounter.difficulty}</div>
+                                    </div>
+                                    <button onClick={() => removeEncounterFromHex(encounter.instanceId)} className="text-gray-400 hover:text-red-400">
+                                        <Trash2 size={14}/>
+                                    </button>
+                                </div>
+                                {encounter.notes && (
+                                    <div className="text-xs text-gray-400 whitespace-pre-wrap">{encounter.notes}</div>
+                                )}
+                                <div className="text-[10px] text-gray-600 uppercase">Source: {encounter.source}</div>
+                            </div>
+                        ))}
                     </div>
                 </div>
             )}
@@ -1087,7 +1585,7 @@ export default function App() {
             const r_offset = Math.floor(i / 8);
             const q = c;
             const r = r_offset - Math.floor((c - (c&1)) / 2);
-            return { q, r, status: 'unexplored', title: '', icon: 'none', terrain: 'plains', notes: '' };
+            return { q, r, status: 'unexplored', title: '', icon: 'none', terrain: 'plains', notes: '', encounters: [], npcs: [] };
         });
     });
 
@@ -1166,7 +1664,7 @@ export default function App() {
                     if (existing) {
                         newHexes.push(existing);
                     } else {
-                        newHexes.push({ q, r, status: 'unexplored', title: '', icon: 'none', terrain: 'plains', notes: '' });
+                        newHexes.push({ q, r, status: 'unexplored', title: '', icon: 'none', terrain: 'plains', notes: '', encounters: [], npcs: [] });
                     }
                 }
             }
@@ -1272,7 +1770,11 @@ export default function App() {
             case 'MAP': return <MapWidget mapUrl={mapUrl} setMapUrl={setMapUrl} notes={mapNotes} setNotes={setMapNotes} />;
             case 'DICE': return <DiceWidget />;
             case 'FEAR': return <FearWidget fear={fear} setFear={setFear} />;
-            case 'HEX_DETAIL': return <HexDetailWindowContent hexes={hexes} hexIndex={data.hexIndex} updateHex={updateHex} tables={tables} openWindow={openWindow} />;
+            case 'HEX_DETAIL': return <HexDetailWindowContent hexes={hexes} hexIndex={data.hexIndex} updateHex={updateHex} tables={tables} openWindow={openWindow} savedEncounters={savedEncounters} />;
+            case 'ENCOUNTER_MANAGER': return <EncounterManager savedEncounters={savedEncounters} setSavedEncounters={setSavedEncounters} />;
+            case 'BESTIARY': return <BestiaryWindowContent library={bestiary} setLibrary={setBestiary} openWindow={openWindow} />;
+            case 'ADV_BUILDER': return <AdversaryBuilderWindow onSave={data.onSave} initialData={data.initialData} close={() => closeWindow(data.windowId)} />;
+            case 'BESTIARY_PICKER': return <BestiaryPickerWindowContent library={bestiary} onPick={data.onPick} close={() => closeWindow(data.windowId)} />;
             default: return <div className="p-4 text-gray-500">Widget: {type}</div>;
         }
     };
