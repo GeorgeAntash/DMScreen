@@ -220,6 +220,25 @@ const DEFAULT_NPC_TRAITS = [
     { id: 15, text: "Constantly polishes a coin between their fingers.", category: "Mannerism", tags: "greedy, nervous" }
 ];
 
+const createBlankNpc = (overrides = {}) => ({
+    id: Date.now(),
+    name: 'New NPC',
+    race: '',
+    role: '',
+    pronouns: '',
+    location: '',
+    description: '',
+    goals: '',
+    appearance: '',
+    mannerism: '',
+    voice: '',
+    quirk: '',
+    secret: '',
+    backstory: '',
+    tags: '',
+    ...overrides
+});
+
 const safeSetItem = (key, value) => {
     try {
         localStorage.setItem(key, value);
@@ -960,83 +979,1778 @@ const MapWidget = ({ mapUrl, setMapUrl, notes, setNotes }) => {
     );
 };
 
+const TableRollerWindowContent = ({ table }) => {
+    const [lastRoll, setLastRoll] = useState(null);
+
+    const handleRoll = () => {
+        const sides = parseInt(table.dice.substring(1));
+        const result = Math.floor(Math.random() * sides) + 1;
+        const entry = table.slots[result - 1];
+        setLastRoll({ result, text: entry ? entry.text : "(Empty Slot)" });
+    };
+
+    return (
+        <div className="h-full flex flex-col">
+            <div className="flex justify-between items-center mb-4 p-3 bg-gray-900 rounded border border-gray-700 shadow-sm">
+                <div>
+                    <h3 className="font-bold text-lg text-white">{table.name}</h3>
+                    <div className="text-xs text-gray-500">{table.dice} Table</div>
+                </div>
+                <button onClick={handleRoll} className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg shadow-indigo-900/20 transition-all hover:scale-105 active:scale-95"><Dices size={18}/> Roll</button>
+            </div>
+            {lastRoll && (
+                <div className="mb-4 p-4 bg-gradient-to-br from-indigo-900/50 to-purple-900/50 border border-indigo-500/50 rounded-lg text-center animate-in fade-in zoom-in duration-300 shadow-lg">
+                    <div className="text-sm uppercase tracking-widest text-indigo-300 font-bold mb-1">Result</div>
+                    <div className="text-4xl font-black text-white mb-2 drop-shadow-md">{lastRoll.result}</div>
+                    <div className="text-lg text-indigo-100 font-medium leading-relaxed">{lastRoll.text}</div>
+                </div>
+            )}
+            <div className="flex-1 overflow-y-auto space-y-1 pr-1 custom-scrollbar border-t border-gray-800 pt-2">
+                {table.slots.map((slot, i) => (
+                    <div key={i} className={`flex gap-3 p-2 rounded border transition-colors ${lastRoll && lastRoll.result === i + 1 ? 'bg-indigo-600/20 border-indigo-500/50' : 'bg-gray-800/30 border-gray-800 hover:bg-gray-800'}`}>
+                        <span className={`font-mono w-8 text-right ${lastRoll && lastRoll.result === i + 1 ? 'text-indigo-400 font-bold' : 'text-gray-600'}`}>{i+1}.</span>
+                        <span className={slot ? "text-gray-300" : "text-gray-700 italic"}>{slot ? slot.text : "Empty"}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+const TablePickerWindowContent = ({ tables, customTables, onPick, close }) => {
+    const [search, setSearch] = useState('');
+    const [filter, setFilter] = useState('all');
+
+    const allTables = useMemo(() => [
+        ...customTables,
+        ...(tables.weather ? [{ id: 'weather', name: 'Weather', dice: 'd20', category: 'weather', slots: tables.weather }] : []),
+        ...(tables.encounters ? [{ id: 'encounters', name: 'Random Encounters', dice: 'd20', category: 'encounters', slots: tables.encounters }] : []),
+        ...(tables.items ? [{ id: 'items', name: 'Loot / Items', dice: 'd20', category: 'items', slots: tables.items }] : [])
+    ], [tables, customTables]);
+
+    const filtered = allTables.filter(t => {
+        const matchesSearch = t.name.toLowerCase().includes(search.toLowerCase());
+        const matchesFilter = filter === 'all' || t.category === filter;
+        return matchesSearch && matchesFilter;
+    });
+
+    return (
+        <div className="h-full flex flex-col gap-4">
+            <div className="flex flex-col gap-2 bg-gray-900/50 p-3 rounded border border-gray-800">
+                <div className="relative">
+                    <Search size={14} className="absolute top-2.5 left-2 text-gray-500"/>
+                    <input
+                        className="w-full bg-gray-800 border border-gray-700 rounded pl-8 py-1.5 text-sm text-white focus:border-indigo-500 outline-none"
+                        placeholder="Search tables..."
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                    />
+                </div>
+                <div className="flex gap-2">
+                    <select className="flex-1 bg-gray-800 border border-gray-700 rounded text-xs px-2 py-1.5 text-gray-300" value={filter} onChange={e => setFilter(e.target.value)}>
+                        <option value="all">All Categories</option>
+                        {TABLE_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                    </select>
+                </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto min-h-0 space-y-2">
+                {filtered.map(table => (
+                    <div key={table.id} className="bg-gray-800 border border-gray-700 p-3 rounded flex justify-between items-center group hover:border-indigo-500 transition-colors">
+                        <div>
+                            <div className="font-bold text-sm text-white flex items-center gap-2">
+                                {table.name}
+                                <span className="text-[10px] bg-gray-900 text-gray-500 px-1.5 py-0.5 rounded border border-gray-700 uppercase">{table.dice}</span>
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1 capitalize">{table.category || 'General'} • {table.slots.filter(s=>s).length} items</div>
+                        </div>
+                        <button
+                            onClick={() => { onPick(table.id); close(); }}
+                            className="bg-indigo-700 hover:bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1 shadow-lg shadow-indigo-900/20"
+                        >
+                            <Link size={12}/> Link
+                        </button>
+                    </div>
+                ))}
+                {filtered.length === 0 && <div className="text-center text-gray-500 text-sm italic py-8">No tables found.</div>}
+            </div>
+        </div>
+    );
+};
+
+const TableManagerWindowContent = ({ tables, setTables, customTables, setCustomTables, close, openWindow, onQuickCombat }) => {
+    const [activeCategory, setActiveCategory] = useState('items');
+    const [view, setView] = useState('list');
+    const [isAdding, setIsAdding] = useState(false);
+    const [newItem, setNewItem] = useState({ text: '', tags: '', tone: 'neutral', rarity: 'common' });
+    const [editingTable, setEditingTable] = useState(null);
+    const [autoFillConfig, setAutoFillConfig] = useState({ tone: 'mixed', tags: '', includeWondrous: false });
+    const [showAutoFill, setShowAutoFill] = useState(false);
+    const [entrySearchTerm, setEntrySearchTerm] = useState('');
+    const [entryFilterTone, setEntryFilterTone] = useState('all');
+    const [entryFilterRarity, setEntryFilterRarity] = useState('all');
+
+    const handleAddEntry = () => {
+        if (!newItem.text) return;
+        setTables(prev => ({ ...prev, [activeCategory]: [...(prev[activeCategory] || []), { id: Date.now(), ...newItem }] }));
+        setIsAdding(false);
+        setNewItem({ text: '', tags: '', tone: 'neutral', rarity: 'common' });
+    };
+
+    const deleteEntry = (id) => {
+        const item = (tables[activeCategory] || []).find(i => i.id === id);
+        if (item && item.isLinked) {
+            alert("This entry is managed by the Encounter Builder. Delete the encounter there to remove this entry.");
+            return;
+        }
+        if(window.confirm("Delete this entry?")) {
+            setTables(prev => ({ ...prev, [activeCategory]: prev[activeCategory].filter(i => i.id !== id) }));
+        }
+    };
+
+    const updateEntry = (id, field, value) => {
+        setTables(prev => ({
+             ...prev,
+             [activeCategory]: prev[activeCategory].map(item => item.id === id ? { ...item, [field]: value } : item)
+        }));
+    };
+
+    const startNewTable = () => {
+        setEditingTable({ id: Date.now(), name: 'New Table', dice: 'd6', slots: Array(6).fill(null), category: activeCategory });
+        setView('editor');
+    };
+
+    const updateTableDice = (dice) => {
+        const size = parseInt(dice.substring(1));
+        setEditingTable(prev => ({ ...prev, dice, slots: Array(size).fill(null).map((_, i) => prev.slots[i] || null) }));
+    };
+
+    const saveTable = () => {
+        setCustomTables(prev => {
+            const existing = prev.findIndex(t => t.id === editingTable.id);
+            if (existing >= 0) { const updated = [...prev]; updated[existing] = editingTable; return updated; }
+            return [...prev, editingTable];
+        });
+        setView('list');
+    };
+
+    const deleteTable = (id) => {
+        if(window.confirm("Delete this table?")) {
+            setCustomTables(prev => prev.filter(t => t.id !== id));
+        }
+    };
+
+    const handleDragStart = (e, entry) => { e.dataTransfer.setData('entry', JSON.stringify(entry)); };
+    const handleDrop = (e, index) => {
+        e.preventDefault();
+        const entry = JSON.parse(e.dataTransfer.getData('entry'));
+        setEditingTable(prev => { const newSlots = [...prev.slots]; newSlots[index] = entry; return { ...prev, slots: newSlots }; });
+    };
+
+    const handleRollTable = (table) => {
+        openWindow('TABLE_ROLLER', { table }, `Roll: ${table.name}`);
+    };
+
+    const handleAutoFill = () => {
+        const size = editingTable.slots.length;
+        const candidates = (tables[activeCategory] || []).filter(item => {
+            if (autoFillConfig.tags) {
+                if (!item.tags) return true;
+                const searchTags = autoFillConfig.tags.toLowerCase().split(',').map(s => s.trim());
+                const itemTags = (item.tags || '').toLowerCase();
+                const matches = searchTags.some(t => itemTags.includes(t));
+                if (!matches) return false;
+            }
+            if (autoFillConfig.tone !== 'mixed' && item.tone !== autoFillConfig.tone) return false;
+            return true;
+        });
+
+        if (candidates.length === 0) { alert("No matching entries found to auto-fill."); return; }
+
+        const newSlots = [...editingTable.slots];
+        let wondrousSlots = [];
+        let remainingSlotsCount = size;
+
+        if (size >= 20) {
+             const wondrousCount = size === 20 ? 2 : (size === 50 ? 6 : 11);
+             for (let i = size - wondrousCount; i < size; i++) { if (!newSlots[i]) wondrousSlots.push(i); }
+             remainingSlotsCount = size - wondrousCount;
+        }
+
+        const base = Math.floor(remainingSlotsCount / 3);
+        const remainder = remainingSlotsCount % 3;
+        let counts = { common: base + (remainder >= 1 ? 1 : 0), unlikely: base + (remainder >= 2 ? 1 : 0), rare: base };
+        const usedIds = new Set(newSlots.filter(s => s).map(s => s.id));
+
+        const fillSlots = (targetIndices, rarityFilter) => {
+            let pool = candidates;
+            if (rarityFilter) {
+                 pool = candidates.filter(c => c.rarity === rarityFilter);
+                 if (pool.length === 0) pool = candidates;
+            }
+            pool = pool.sort(() => Math.random() - 0.5);
+            for (let idx of targetIndices) {
+                if (newSlots[idx]) continue;
+                const pick = pool.find(item => !usedIds.has(item.id));
+                if (pick) { newSlots[idx] = pick; usedIds.add(pick.id); } else if (pool.length > 0) { newSlots[idx] = pool[Math.floor(Math.random() * pool.length)]; }
+            }
+        };
+
+        if (wondrousSlots.length > 0) fillSlots(wondrousSlots, 'wondrous');
+        let currentIdx = 0;
+        const commonIndices = []; for(let i=0; i<counts.common; i++) commonIndices.push(currentIdx++); fillSlots(commonIndices, 'common');
+        const unlikelyIndices = []; for(let i=0; i<counts.unlikely; i++) unlikelyIndices.push(currentIdx++); fillSlots(unlikelyIndices, 'unlikely');
+        const rareIndices = []; for(let i=0; i<counts.rare; i++) rareIndices.push(currentIdx++); fillSlots(rareIndices, 'rare');
+
+        setEditingTable(prev => ({ ...prev, slots: newSlots }));
+        setShowAutoFill(false);
+    };
+
+    if (view === 'editor' && editingTable) {
+        const displayedEntries = (tables[activeCategory] || []).filter(item => {
+            const matchesText = item.text.toLowerCase().includes(entrySearchTerm.toLowerCase()) || (item.tags && item.tags.toLowerCase().includes(entrySearchTerm.toLowerCase()));
+            const matchesTone = entryFilterTone === 'all' || item.tone === entryFilterTone;
+            const matchesRarity = entryFilterRarity === 'all' || item.rarity === entryFilterRarity;
+            return matchesText && matchesTone && matchesRarity;
+        });
+
+        return (
+            <div className="h-full flex gap-4">
+                <div className="flex-1 flex flex-col min-w-0 bg-gray-900/50 p-2 rounded border border-gray-700">
+                    <div className="flex justify-between items-center mb-2">
+                        <input className="bg-transparent font-bold text-white border-b border-gray-600 focus:border-indigo-500 outline-none" value={editingTable.name} onChange={e => setEditingTable({...editingTable, name: e.target.value})} />
+                        <div className="flex gap-2">
+                            <select className="bg-gray-800 border border-gray-600 rounded text-xs text-white px-2 py-1" value={editingTable.dice} onChange={e => updateTableDice(e.target.value)}>{['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd50', 'd100'].map(d => <option key={d} value={d}>{d}</option>)}</select>
+                            <button onClick={() => setShowAutoFill(true)} className="bg-purple-700 hover:bg-purple-600 text-white p-1 rounded" title="Auto Fill"><Wand2 size={14}/></button>
+                            <button onClick={() => { const shuffled = [...editingTable.slots].sort(() => Math.random() - 0.5); setEditingTable({...editingTable, slots: shuffled}); }} className="bg-gray-700 hover:bg-gray-600 text-white p-1 rounded" title="Shuffle"><Shuffle size={14}/></button>
+                        </div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                        {editingTable.slots.map((slot, i) => (
+                            <div key={i} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, i)} className="flex items-center gap-2 bg-black/30 p-1 rounded border border-gray-800 text-xs min-h-[32px]">
+                                <span className="font-mono text-gray-500 w-6 text-center">{i+1}</span>
+                                {slot ? ( <div className="flex-1 flex justify-between items-center text-gray-200"><span className="truncate">{slot.text}</span><button onClick={() => { const newSlots = [...editingTable.slots]; newSlots[i] = null; setEditingTable({...editingTable, slots: newSlots}); }} className="text-gray-600 hover:text-red-500"><X size={12}/></button></div> ) : ( <span className="text-gray-600 italic">Drag entry here...</span> )}
+                            </div>
+                        ))}
+                    </div>
+                    <div className="flex justify-end gap-2 mt-2 pt-2 border-t border-gray-700">
+                        <button onClick={() => setView('list')} className="text-xs text-gray-400 hover:text-white">Cancel</button>
+                        <button onClick={saveTable} className="bg-green-700 hover:bg-green-600 text-white px-3 py-1 rounded text-xs font-bold flex items-center gap-1"><Save size={12}/> Save Table</button>
+                    </div>
+                </div>
+                <div className="w-1/3 flex flex-col min-w-0 border-l border-gray-700 pl-2">
+                    <h4 className="text-xs font-bold text-gray-500 uppercase mb-2">Available Entries</h4>
+                    <div className="flex flex-col gap-2 mb-2">
+                        <input className="w-full bg-gray-800 border border-gray-600 rounded p-1 text-xs text-white" placeholder="Search..." value={entrySearchTerm} onChange={e => setEntrySearchTerm(e.target.value)} />
+                        <div className="flex gap-1">
+                            <select className="bg-gray-800 border border-gray-600 rounded text-[10px] text-white flex-1" value={entryFilterTone} onChange={e => setEntryFilterTone(e.target.value)}><option value="all">All Tones</option><option value="positive">Positive</option><option value="neutral">Neutral</option><option value="negative">Negative</option></select>
+                            <select className="bg-gray-800 border border-gray-600 rounded text-[10px] text-white flex-1" value={entryFilterRarity} onChange={e => setEntryFilterRarity(e.target.value)}><option value="all">All Rarities</option><option value="common">Common</option><option value="unlikely">Unlikely</option><option value="rare">Rare</option><option value="wondrous">Wondrous</option></select>
+                        </div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto space-y-1 pr-1">
+                        {displayedEntries.map(item => (
+                            <div key={item.id} draggable onDragStart={(e) => handleDragStart(e, item)} className="bg-gray-800 border border-gray-700 p-2 rounded text-xs cursor-grab hover:bg-gray-700 active:cursor-grabbing">
+                                <div className="text-gray-200 truncate">{item.text}</div>
+                                <div className="flex gap-1 mt-1 opacity-60"><span className="bg-black/30 px-1 rounded">{item.rarity}</span><span className="bg-black/30 px-1 rounded">{item.tone}</span></div>
+                            </div>
+                        ))}
+                        {displayedEntries.length === 0 && <div className="text-xs text-gray-500 text-center italic mt-4">No entries match filters.</div>}
+                    </div>
+                </div>
+                {showAutoFill && (
+                    <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-20">
+                        <div className="bg-gray-800 border border-gray-600 p-4 rounded-lg w-64 shadow-xl">
+                            <h3 className="font-bold text-white mb-3">Auto Fill Settings</h3>
+                            <div className="space-y-3 mb-4">
+                                <div><label className="text-xs text-gray-400 block mb-1">Tone</label><select className="w-full bg-gray-900 border border-gray-700 rounded text-xs text-white p-1" value={autoFillConfig.tone} onChange={e => setAutoFillConfig({...autoFillConfig, tone: e.target.value})}><option value="mixed">Mixed (Balanced)</option><option value="positive">Positive Only</option><option value="negative">Negative Only</option><option value="neutral">Neutral Only</option></select></div>
+                                <div><label className="text-xs text-gray-400 block mb-1">Tags (Comma sep)</label><input className="w-full bg-gray-900 border border-gray-700 rounded text-xs text-white p-1" placeholder="desert, indoor..." value={autoFillConfig.tags} onChange={e => setAutoFillConfig({...autoFillConfig, tags: e.target.value})} /></div>
+                            </div>
+                            <div className="flex justify-end gap-2">
+                                <button onClick={() => setShowAutoFill(false)} className="text-xs text-gray-400 hover:text-white">Cancel</button>
+                                <button onClick={handleAutoFill} className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded text-xs font-bold">Generate</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    }
+    return (
+        <div className="h-full flex gap-4">
+            <div className="w-40 flex flex-col gap-1 border-r border-gray-700 pr-2">
+                {TABLE_CATEGORIES.map(cat => ( <button key={cat.id} onClick={() => setActiveCategory(cat.id)} className={`text-left px-3 py-2 rounded text-xs font-bold flex items-center gap-2 ${activeCategory === cat.id ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}><cat.icon size={14}/> {cat.label}</button> ))}
+            </div>
+            <div className="flex-1 flex flex-col min-w-0">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-bold text-gray-200 capitalize">{activeCategory}</h3>
+                    <div className="flex gap-2">
+                        <button onClick={() => setIsAdding(true)} className="bg-green-700 hover:bg-green-600 text-white px-3 py-1 rounded text-xs flex items-center gap-1"><Plus size={12}/> Add Entry</button>
+                        <button onClick={startNewTable} className="bg-blue-700 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs flex items-center gap-1"><Grid size={12}/> New Table</button>
+                    </div>
+                </div>
+                {isAdding && (
+                    <div className="bg-gray-900/50 p-3 rounded border border-gray-700 mb-4 animate-in fade-in slide-in-from-top-2">
+                        <textarea className="w-full bg-gray-800 border border-gray-600 rounded p-2 text-sm text-white mb-2 resize-none h-20" placeholder="Describe the entry..." value={newItem.text} onChange={e => setNewItem({...newItem, text: e.target.value})} />
+                        <div className="flex gap-2 mb-2">
+                            <input className="flex-1 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-white" placeholder="Tags (comma sep)" value={newItem.tags} onChange={e => setNewItem({...newItem, tags: e.target.value})} />
+                            <select className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-white" value={newItem.tone} onChange={e => setNewItem({...newItem, tone: e.target.value})}><option value="positive">Positive</option><option value="neutral">Neutral</option><option value="negative">Negative</option></select>
+                            <select className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-white" value={newItem.rarity} onChange={e => setNewItem({...newItem, rarity: e.target.value})}><option value="common">Common</option><option value="unlikely">Unlikely</option><option value="rare">Rare</option><option value="wondrous">Wondrous</option></select>
+                        </div>
+                        <div className="flex justify-end gap-2">
+                            <button onClick={() => setIsAdding(false)} className="text-xs text-gray-400 hover:text-white">Cancel</button>
+                            <button onClick={handleAddEntry} className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded text-xs font-bold">Save Entry</button>
+                        </div>
+                    </div>
+                )}
+                <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+                    <div>
+                        <h4 className="text-xs font-bold text-gray-500 uppercase mb-2 border-b border-gray-700 pb-1">Rollable Tables</h4>
+                        <div className="grid grid-cols-2 gap-2">
+                            {customTables.filter(t => t.category === activeCategory).map(table => (
+                                <div key={table.id} className="bg-gray-800 border border-gray-600 p-2 rounded flex justify-between items-center group">
+                                    <div><div className="font-bold text-sm text-blue-300">{table.name}</div><div className="text-[10px] text-gray-500">{table.dice} • {table.slots.filter(s=>s).length} entries</div></div>
+                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                                        <button onClick={() => handleRollTable(table)} className="text-gray-400 hover:text-indigo-400" title="Roll Table"><Dices size={12}/></button>
+                                        <button onClick={() => { setEditingTable(table); setView('editor'); }} className="text-gray-400 hover:text-white"><Pencil size={12}/></button>
+                                        <button onClick={() => deleteTable(table.id)} className="text-gray-400 hover:text-red-500"><Trash2 size={12}/></button>
+                                    </div>
+                                </div>
+                            ))}
+                            {customTables.filter(t => t.category === activeCategory).length === 0 && <div className="text-xs text-gray-600 italic col-span-2">No tables created yet.</div>}
+                        </div>
+                    </div>
+                    <div>
+                        <h4 className="text-xs font-bold text-gray-500 uppercase mb-2 border-b border-gray-700 pb-1 mt-2">Raw Entries</h4>
+                        <div className="space-y-2">
+                            {(tables[activeCategory] || []).map(item => (
+                                <div key={item.id} draggable onDragStart={(e) => handleDragStart(e, item)} className={`border p-2 rounded text-xs cursor-grab hover:bg-gray-700 active:cursor-grabbing group flex justify-between items-start ${item.isLinked ? 'bg-indigo-900/20 border-indigo-500/50' : 'bg-gray-800 border-gray-700'}`}>
+                                    <div className="flex-1">
+                                        <div className="text-gray-200 flex items-center gap-2 mb-1">
+                                            <input
+                                                className="bg-transparent border-none p-0 focus:ring-0 text-gray-200 w-full"
+                                                value={item.text}
+                                                onChange={(e) => updateEntry(item.id, 'text', e.target.value)}
+                                            />
+                                            {item.isLinked && <Link size={10} className="text-indigo-400" title="Linked to Encounter"/>}
+                                        </div>
+                                        <div className="flex gap-2 opacity-80 items-center">
+                                            <select
+                                                className={`text-[10px] px-1 rounded uppercase font-bold border-none py-0 focus:ring-0 cursor-pointer ${item.tone === 'positive' ? 'bg-green-900 text-green-300' : item.tone === 'negative' ? 'bg-red-900 text-red-300' : 'bg-gray-700 text-gray-300'}`}
+                                                value={item.tone}
+                                                onChange={(e) => updateEntry(item.id, 'tone', e.target.value)}
+                                            >
+                                                <option value="neutral">Neutral</option>
+                                                <option value="positive">Positive</option>
+                                                <option value="negative">Negative</option>
+                                            </select>
+
+                                            <select
+                                                className="text-[10px] text-purple-300 bg-purple-900/30 px-1 rounded border border-purple-900/50 py-0 focus:ring-0 cursor-pointer"
+                                                value={item.rarity}
+                                                onChange={(e) => updateEntry(item.id, 'rarity', e.target.value)}
+                                            >
+                                                <option value="common">Common</option>
+                                                <option value="unlikely">Unlikely</option>
+                                                <option value="rare">Rare</option>
+                                                <option value="wondrous">Wondrous</option>
+                                            </select>
+
+                                            <span className="text-[10px] text-gray-500 italic">{item.tags}</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
+                                        {activeCategory === 'encounters' && (
+                                            <button
+                                                onClick={() => onQuickCombat(item)}
+                                                className="text-red-400 hover:text-red-200 p-1 hover:bg-red-900/20 rounded"
+                                                title="Quick Combat"
+                                            >
+                                                <Sword size={14}/>
+                                            </button>
+                                        )}
+                                        <button onClick={() => deleteEntry(item.id)} className={`text-gray-600 hover:text-red-500 ${item.isLinked ? 'cursor-not-allowed text-gray-700 hover:text-gray-700' : ''}`}><Trash2 size={12}/></button>
+                                    </div>
+                                </div>
+                            ))}
+                             {(tables[activeCategory] || []).length === 0 && <div className="text-center text-gray-600 text-xs italic">No entries in this category yet.</div>}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const SceneWindowContent = ({ node, updateNode, openWindow, savedEncounters, tables, customTables, npcCatalog }) => {
+    if (!node) return <div className="text-gray-400">Scene not found.</div>;
+
+    const addSkillCheck = () => updateNode(node.id, { skillChecks: [...(node.skillChecks || []), { id: Date.now(), dc: '10', skill: 'Instinct', result: 'Reveals...' }] });
+    const updateSkillCheck = (id, f, v) => updateNode(node.id, { skillChecks: node.skillChecks.map(c => c.id === id ? { ...c, [f]: v } : c) });
+    const deleteSkillCheck = (id) => updateNode(node.id, { skillChecks: node.skillChecks.filter(c => c.id !== id) });
+    const addNPC = () => updateNode(node.id, { npcs: [...(node.npcs || []), createBlankNpc()] });
+
+    const importNPC = () => {
+        openWindow('NPC_PICKER', { onPick: (npc) => {
+            updateNode(node.id, { npcs: [...(node.npcs || []), { ...npc, id: Date.now() }] });
+        }}, "Import NPC");
+    };
+
+    const handleAddEncounter = (e) => {
+        const encounterId = parseInt(e.target.value);
+        const encounter = savedEncounters.find(enc => enc.id === encounterId);
+        if (encounter) {
+            const newEnemies = (encounter.enemies || []).map(adv => ({
+                ...adv,
+                id: Date.now() + Math.random(),
+                instances: (adv.instances || []).map(inst => ({ ...inst, id: Date.now() + Math.random() }))
+            }));
+            updateNode(node.id, { enemies: [...(node.enemies || []), ...newEnemies] });
+        }
+        e.target.value = "";
+    };
+
+    const allTables = [
+        ...customTables,
+        ...(tables.weather ? [{ id: 'weather', name: 'Weather', dice: 'd20', slots: tables.weather }] : []),
+        ...(tables.encounters ? [{ id: 'encounters', name: 'Random Encounters', dice: 'd20', slots: tables.encounters }] : []),
+        ...(tables.items ? [{ id: 'items', name: 'Loot / Items', dice: 'd20', slots: tables.items }] : [])
+    ];
+
+    const linkTable = (tableId) => {
+        if (!tableId) return;
+        const linked = [...(node.linkedTables || [])];
+        if (!linked.includes(tableId)) {
+            updateNode(node.id, { linkedTables: [...linked, tableId] });
+        }
+    };
+
+    const removeTable = (tableId) => {
+        updateNode(node.id, { linkedTables: (node.linkedTables || []).filter(t => t !== tableId) });
+    };
+
+    const rollLinkedTable = (tableId) => {
+        const table = allTables.find(t => String(t.id) === String(tableId));
+        if (table) {
+            openWindow('TABLE_ROLLER', { table }, `Roll: ${table.name}`);
+        }
+    };
+
+    return (
+        <div className="h-full flex flex-col gap-6 overflow-y-auto min-h-0 p-1">
+            <input className="w-full bg-transparent text-2xl font-bold text-white border-b border-gray-700 focus:border-indigo-500 focus:outline-none pb-2 flex-shrink-0" value={node.title} onChange={(e) => updateNode(node.id, { title: e.target.value })} />
+
+            <div className="space-y-2 flex-shrink-0"><label className="block text-xs font-bold text-indigo-400 uppercase flex items-center gap-2"><BookOpen size={12}/> Read Aloud</label><textarea className="w-full h-32 input-dark p-4 rounded font-serif text-lg leading-relaxed resize-none border-l-4 border-indigo-500" value={node.desc} onChange={(e) => updateNode(node.id, { desc: e.target.value })} placeholder="Describe the scene..." /></div>
+
+            <div className="space-y-2 flex-shrink-0"><div className="flex justify-between items-center"><label className="block text-xs font-bold text-blue-400 uppercase flex items-center gap-2"><Dices size={12}/> Skills & Checks</label><button onClick={addSkillCheck} className="text-[10px] bg-blue-900/50 hover:bg-blue-800 text-blue-200 px-2 py-1 rounded">+ Add Check</button></div>{(node.skillChecks || []).map(check => (<div key={check.id} className="flex items-center gap-2 bg-gray-900 p-2 rounded border border-gray-800"><div className="w-12"><label className="text-[8px] text-gray-500 font-bold uppercase text-center">DC</label><input className="w-full bg-transparent text-center font-bold text-white border-none focus:ring-0" value={check.dc} onChange={(e) => updateSkillCheck(check.id, 'dc', e.target.value)} /></div><div className="w-24"><label className="text-[8px] text-gray-500 font-bold uppercase">Skill</label><input className="w-full bg-transparent text-sm text-gray-300 border-none focus:ring-0" value={check.skill} onChange={(e) => updateSkillCheck(check.id, 'skill', e.target.value)} /></div><div className="flex-1"><label className="text-[8px] text-gray-500 font-bold uppercase">Result</label><input className="w-full bg-transparent text-sm text-gray-400 border-none focus:ring-0" value={check.result} onChange={(e) => updateSkillCheck(check.id, 'result', e.target.value)} /></div><button onClick={() => deleteSkillCheck(check.id)} className="text-gray-600 hover:text-red-500"><Trash2 size={14}/></button></div>))}</div>
+
+            <div className="space-y-2 flex-shrink-0">
+                <div className="flex justify-between items-center bg-red-900/10 p-2 rounded border border-red-900/30">
+                    <label className="block text-xs font-bold text-red-400 uppercase flex items-center gap-2"><Sword size={12}/> Encounters</label>
+                    <div className="flex gap-2">
+                        <select className="bg-gray-800 border border-red-900/30 rounded text-[10px] text-gray-300 max-w-[120px]" onChange={handleAddEncounter} value="">
+                            <option value="" disabled>+ Load Premade</option>
+                            {savedEncounters.map(enc => <option key={enc.id} value={enc.id}>{enc.name}</option>)}
+                        </select>
+                        <button onClick={() => openWindow('COMBAT', { nodeId: node.id }, `Combat: ${node.title}`)} className="text-xs bg-red-700 hover:bg-red-600 text-white px-3 py-1 rounded font-bold flex items-center gap-2"><ExternalLink size={12}/> Open Combat</button>
+                    </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                    {(node.enemies || []).length === 0 && <div className="col-span-2 text-xs text-gray-500 italic text-center py-2">No encounters loaded. Select a premade encounter or add via Combat view.</div>}
+                    {(node.enemies || []).map(enemy => (
+                        <div key={enemy.id} className="bg-gray-800 p-2 rounded border border-gray-700 flex justify-between items-center opacity-75">
+                            <span className="text-sm font-bold text-gray-300">{enemy.name || 'Unnamed Enemy'}</span>
+                            <span className="text-[10px] bg-black px-1.5 py-0.5 rounded text-gray-500">{enemy.type || 'Standard'} • x{(enemy.instances || []).length}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            <div className="space-y-2 flex-shrink-0">
+                <div className="flex justify-between items-center bg-yellow-900/10 p-2 rounded border border-yellow-900/30">
+                    <label className="block text-xs font-bold text-yellow-400 uppercase flex items-center gap-2"><List size={12}/> Tables</label>
+                    <button
+                        onClick={() => openWindow('TABLE_PICKER', { onPick: (tableId) => linkTable(tableId) }, 'Link Table')}
+                        className="bg-gray-800 border border-yellow-900/30 rounded text-[10px] text-gray-300 px-2 py-1 flex items-center gap-1 hover:bg-gray-700 hover:text-white"
+                    >
+                        <Plus size={10}/> Link Table
+                    </button>
+                </div>
+                <div className="grid grid-cols-1 gap-2">
+                    {(node.linkedTables || []).map(tableId => {
+                        const table = allTables.find(t => String(t.id) === String(tableId));
+                        if (!table) return null;
+                        return (
+                            <div key={tableId} className="bg-gray-800 p-2 rounded border border-gray-700 flex justify-between items-center">
+                                <span className="text-sm font-bold text-gray-300">{table.name}</span>
+                                <div className="flex gap-2">
+                                    <button onClick={() => rollLinkedTable(tableId)} className="bg-indigo-700 hover:bg-indigo-600 text-white px-2 py-1 rounded text-xs flex items-center gap-1"><Dices size={10}/> Roll</button>
+                                    <button onClick={() => removeTable(tableId)} className="text-gray-600 hover:text-red-500"><X size={14}/></button>
+                                </div>
+                            </div>
+                        );
+                    })}
+                    {(node.linkedTables || []).length === 0 && <div className="text-xs text-gray-500 italic text-center py-2">No tables linked to this scene.</div>}
+                </div>
+            </div>
+
+            <div className="space-y-2 flex-shrink-0">
+                <div className="flex justify-between items-center"><label className="block text-xs font-bold text-green-400 uppercase flex items-center gap-2"><User size={12}/> NPCs</label>
+                <div className="flex gap-1">
+                    <button onClick={importNPC} className="text-[10px] bg-green-900/30 hover:bg-green-800/50 text-green-200 px-2 py-1 rounded border border-green-800">Import from Catalog</button>
+                    <button onClick={addNPC} className="text-[10px] bg-green-900/50 hover:bg-green-800 text-green-200 px-2 py-1 rounded">+ Create NPC</button>
+                </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                    {(node.npcs || []).map(npc => (
+                        <div key={npc.id} onClick={() => openWindow('NPC_BUILDER', { onSave: (data) => updateNode(node.id, { npcs: node.npcs.map(n => n.id === npc.id ? data : n) }), initialData: npc }, `Edit NPC: ${npc.name}`)} className="bg-gray-800 hover:bg-gray-700 border border-gray-700 p-2 rounded cursor-pointer flex items-center gap-2 group transition-colors">
+                            <div className="w-6 h-6 rounded-full bg-gray-600 flex items-center justify-center text-gray-300 font-bold text-xs group-hover:bg-green-600 group-hover:text-white">{npc.name.charAt(0)}</div>
+                            <span className="font-bold text-sm truncate">{npc.name}</span>
+                            <Pencil size={10} className="ml-auto opacity-0 group-hover:opacity-100 text-gray-400"/>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const NpcBuilderWindowContent = ({ onSave, initialData, npcTraits, close }) => {
+    const normalizedInitial = useMemo(() => {
+        if (!initialData) return createBlankNpc();
+        const merged = createBlankNpc({
+            ...initialData,
+            description: initialData.description || initialData.desc || ''
+        });
+        return merged;
+    }, [initialData]);
+
+    const [npc, setNpc] = useState(normalizedInitial);
+
+    const updateNpc = (field, value) => setNpc(prev => ({ ...prev, [field]: value }));
+
+    const rollTrait = (category, field) => {
+        const options = (npcTraits || []).filter(t => t.category === category);
+        if (options.length === 0) return;
+        const pick = options[Math.floor(Math.random() * options.length)];
+        setNpc(prev => {
+            const current = prev[field] || '';
+            const next = current ? `${current}\n${pick.text}` : pick.text;
+            return { ...prev, [field]: next };
+        });
+    };
+
+    const handleSave = () => {
+        const payload = {
+            ...npc,
+            id: npc.id || Date.now(),
+            desc: npc.description || npc.desc || ''
+        };
+        onSave?.(payload);
+        close?.();
+    };
+
+    return (
+        <div className="h-full flex flex-col gap-4 overflow-y-auto pr-1">
+            <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-3">
+                    <div>
+                        <label className="text-xs uppercase font-bold text-gray-500">Name</label>
+                        <input className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-white focus:border-green-500 outline-none" value={npc.name} onChange={(e) => updateNpc('name', e.target.value)} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        <div>
+                            <label className="text-xs uppercase font-bold text-gray-500">Race</label>
+                            <input className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-white focus:border-green-500 outline-none" value={npc.race} onChange={(e) => updateNpc('race', e.target.value)} />
+                        </div>
+                        <div>
+                            <label className="text-xs uppercase font-bold text-gray-500">Role</label>
+                            <input className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-white focus:border-green-500 outline-none" value={npc.role} onChange={(e) => updateNpc('role', e.target.value)} />
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        <div>
+                            <label className="text-xs uppercase font-bold text-gray-500">Pronouns</label>
+                            <input className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-white focus:border-green-500 outline-none" value={npc.pronouns} onChange={(e) => updateNpc('pronouns', e.target.value)} />
+                        </div>
+                        <div>
+                            <label className="text-xs uppercase font-bold text-gray-500">Location</label>
+                            <input className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-white focus:border-green-500 outline-none" value={npc.location} onChange={(e) => updateNpc('location', e.target.value)} />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="text-xs uppercase font-bold text-gray-500">Tags</label>
+                        <input className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-white focus:border-green-500 outline-none" value={npc.tags} onChange={(e) => updateNpc('tags', e.target.value)} placeholder="desert, faction, merchant" />
+                    </div>
+                </div>
+                <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                        <label className="text-xs uppercase font-bold text-gray-500">Description</label>
+                        <button onClick={() => rollTrait('Appearance', 'appearance')} className="text-[10px] bg-gray-800 border border-gray-700 text-gray-300 px-2 py-1 rounded flex items-center gap-1"><Dices size={10}/> Roll Appearance</button>
+                    </div>
+                    <textarea className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-gray-300 resize-none h-24 focus:outline-none focus:border-green-500" value={npc.description} onChange={(e) => updateNpc('description', e.target.value)} placeholder="Physical description and key details..." />
+                    <div>
+                        <label className="text-xs uppercase font-bold text-gray-500">Goals</label>
+                        <textarea className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-gray-300 resize-none h-20 focus:outline-none focus:border-green-500" value={npc.goals} onChange={(e) => updateNpc('goals', e.target.value)} placeholder="Motivations, wants, or hooks..." />
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                {[
+                    { field: 'appearance', label: 'Appearance' },
+                    { field: 'mannerism', label: 'Mannerism' },
+                    { field: 'voice', label: 'Voice' },
+                    { field: 'quirk', label: 'Quirk' },
+                    { field: 'goals', label: 'Goal' },
+                    { field: 'secret', label: 'Secret' },
+                    { field: 'backstory', label: 'Backstory' }
+                ].map(section => (
+                    <div key={section.field} className="bg-gray-900/50 border border-gray-800 rounded p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                            <label className="text-xs uppercase font-bold text-gray-400">{section.label}</label>
+                            <button onClick={() => rollTrait(section.label, section.field)} className="text-[10px] bg-gray-800 border border-gray-700 text-gray-300 px-2 py-1 rounded flex items-center gap-1"><Dices size={10}/> Roll</button>
+                        </div>
+                        <textarea className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-xs text-gray-300 resize-none h-20 focus:outline-none focus:border-green-500" value={npc[section.field] || ''} onChange={(e) => updateNpc(section.field, e.target.value)} />
+                    </div>
+                ))}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-gray-800">
+                <button onClick={close} className="text-xs text-gray-400 hover:text-white">Cancel</button>
+                <button onClick={handleSave} className="bg-green-700 hover:bg-green-600 text-white px-3 py-1 rounded text-xs font-bold flex items-center gap-1"><Save size={12}/> Save NPC</button>
+            </div>
+        </div>
+    );
+};
+
+const NpcManagerWindowContent = ({ npcCatalog, setNpcCatalog, npcTraits, setNpcTraits, openWindow }) => {
+    const [selectedId, setSelectedId] = useState(null);
+    const [search, setSearch] = useState('');
+    const [activeTab, setActiveTab] = useState('catalog');
+    const [traitForm, setTraitForm] = useState({ text: '', category: NPC_TRAIT_CATEGORIES[0], tags: '' });
+
+    const filteredNpcs = npcCatalog.filter(npc => {
+        const haystack = `${npc.name} ${npc.race} ${npc.role} ${npc.tags} ${npc.description || npc.desc || ''}`.toLowerCase();
+        return haystack.includes(search.toLowerCase());
+    });
+
+    const selectedNpc = npcCatalog.find(npc => npc.id === selectedId);
+
+    const handleSaveNpc = (savedNpc) => {
+        setNpcCatalog(prev => {
+            const existing = prev.findIndex(n => n.id === savedNpc.id);
+            if (existing >= 0) {
+                const next = [...prev];
+                next[existing] = savedNpc;
+                return next;
+            }
+            return [...prev, savedNpc];
+        });
+    };
+
+    const handleDeleteNpc = (id, e) => {
+        e.stopPropagation();
+        if (window.confirm('Delete this NPC from the catalog?')) {
+            setNpcCatalog(prev => prev.filter(n => n.id !== id));
+            if (selectedId === id) setSelectedId(null);
+        }
+    };
+
+    const handleAddTrait = () => {
+        if (!traitForm.text.trim()) return;
+        const newTrait = { id: Date.now(), text: traitForm.text.trim(), category: traitForm.category, tags: traitForm.tags.trim() };
+        setNpcTraits(prev => [...prev, newTrait]);
+        setTraitForm({ text: '', category: traitForm.category, tags: '' });
+    };
+
+    const handleDeleteTrait = (id) => {
+        if (window.confirm('Delete this trait?')) {
+            setNpcTraits(prev => prev.filter(t => t.id !== id));
+        }
+    };
+
+    return (
+        <div className="h-full flex gap-4">
+            <div className="w-1/3 flex flex-col min-w-0 border-r border-gray-700 pr-3">
+                <div className="flex items-center gap-2 mb-3">
+                    <Search size={14} className="text-gray-500"/>
+                    <input className="flex-1 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-sm text-white focus:border-green-500 outline-none" placeholder="Search NPCs..." value={search} onChange={e => setSearch(e.target.value)} />
+                    <button onClick={() => openWindow('NPC_BUILDER', { onSave: handleSaveNpc }, 'New NPC')} className="bg-green-700 hover:bg-green-600 text-white px-2 py-1 rounded text-xs font-bold flex items-center gap-1"><Plus size={12}/> New</button>
+                </div>
+                <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+                    {filteredNpcs.map(npc => (
+                        <div key={npc.id} onClick={() => setSelectedId(npc.id)} className={`p-2 rounded border cursor-pointer group ${selectedId === npc.id ? 'bg-green-900/30 border-green-500' : 'bg-gray-800 border-gray-700 hover:border-gray-500'}`}>
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <div className="font-bold text-sm text-white">{npc.name}</div>
+                                    <div className="text-[10px] text-gray-500">{npc.race || 'Unknown'} • {npc.role || 'Role'}</div>
+                                </div>
+                                <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                                    <button onClick={(e) => { e.stopPropagation(); openWindow('NPC_BUILDER', { onSave: handleSaveNpc, initialData: npc }, `Edit NPC: ${npc.name}`); }} className="text-gray-400 hover:text-white p-1"><Pencil size={12}/></button>
+                                    <button onClick={(e) => handleDeleteNpc(npc.id, e)} className="text-red-500 hover:text-red-300 p-1"><Trash2 size={12}/></button>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                    {filteredNpcs.length === 0 && <div className="text-gray-500 text-xs italic text-center mt-4">No NPCs match this search.</div>}
+                </div>
+            </div>
+
+            <div className="flex-1 flex flex-col min-w-0">
+                <div className="flex gap-2 mb-3">
+                    <button onClick={() => setActiveTab('catalog')} className={`px-3 py-1 text-xs font-bold uppercase rounded ${activeTab === 'catalog' ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}>NPC Details</button>
+                    <button onClick={() => setActiveTab('traits')} className={`px-3 py-1 text-xs font-bold uppercase rounded ${activeTab === 'traits' ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}>Trait Library</button>
+                </div>
+
+                {activeTab === 'catalog' && (
+                    <div className="flex-1 overflow-y-auto pr-1">
+                        {selectedNpc ? (
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h3 className="text-xl font-bold text-white">{selectedNpc.name}</h3>
+                                        <p className="text-xs text-gray-400">{selectedNpc.race || 'Unknown'} • {selectedNpc.role || 'Role'} • {selectedNpc.pronouns || 'Pronouns'}</p>
+                                    </div>
+                                    <button onClick={() => openWindow('NPC_BUILDER', { onSave: handleSaveNpc, initialData: selectedNpc }, `Edit NPC: ${selectedNpc.name}`)} className="bg-gray-800 hover:bg-gray-700 text-gray-200 px-2 py-1 rounded text-xs flex items-center gap-1"><Pencil size={12}/> Edit</button>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="bg-gray-900/50 border border-gray-800 rounded p-3">
+                                        <div className="text-xs uppercase font-bold text-gray-500 mb-1">Description</div>
+                                        <div className="text-sm text-gray-300 whitespace-pre-wrap">{selectedNpc.description || selectedNpc.desc || '—'}</div>
+                                    </div>
+                                    <div className="bg-gray-900/50 border border-gray-800 rounded p-3">
+                                        <div className="text-xs uppercase font-bold text-gray-500 mb-1">Goals</div>
+                                        <div className="text-sm text-gray-300 whitespace-pre-wrap">{selectedNpc.goals || '—'}</div>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    {[
+                                        { label: 'Appearance', value: selectedNpc.appearance },
+                                        { label: 'Mannerism', value: selectedNpc.mannerism },
+                                        { label: 'Voice', value: selectedNpc.voice },
+                                        { label: 'Quirk', value: selectedNpc.quirk },
+                                        { label: 'Secret', value: selectedNpc.secret },
+                                        { label: 'Backstory', value: selectedNpc.backstory }
+                                    ].map(block => (
+                                        <div key={block.label} className="bg-gray-900/50 border border-gray-800 rounded p-3">
+                                            <div className="text-xs uppercase font-bold text-gray-500 mb-1">{block.label}</div>
+                                            <div className="text-sm text-gray-300 whitespace-pre-wrap">{block.value || '—'}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex items-center justify-center h-full text-gray-600 italic">Select an NPC to view details.</div>
+                        )}
+                    </div>
+                )}
+
+                {activeTab === 'traits' && (
+                    <div className="flex-1 flex flex-col overflow-y-auto pr-1 gap-4">
+                        <div className="bg-gray-900/50 border border-gray-800 rounded p-3 space-y-3">
+                            <h4 className="text-xs uppercase font-bold text-gray-500">Add Trait</h4>
+                            <input className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-xs text-white focus:border-indigo-500 outline-none" placeholder="Trait text..." value={traitForm.text} onChange={(e) => setTraitForm(prev => ({ ...prev, text: e.target.value }))} />
+                            <div className="flex gap-2">
+                                <select className="bg-gray-900 border border-gray-700 rounded p-2 text-xs text-white flex-1" value={traitForm.category} onChange={(e) => setTraitForm(prev => ({ ...prev, category: e.target.value }))}>
+                                    {NPC_TRAIT_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                </select>
+                                <input className="flex-1 bg-gray-900 border border-gray-700 rounded p-2 text-xs text-white focus:border-indigo-500 outline-none" placeholder="tags" value={traitForm.tags} onChange={(e) => setTraitForm(prev => ({ ...prev, tags: e.target.value }))} />
+                                <button onClick={handleAddTrait} className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded text-xs font-bold">Add</button>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto space-y-3">
+                            {NPC_TRAIT_CATEGORIES.map(cat => (
+                                <div key={cat} className="bg-gray-900/30 border border-gray-800 rounded p-3">
+                                    <div className="text-xs uppercase font-bold text-gray-500 mb-2">{cat}</div>
+                                    <div className="space-y-2">
+                                        {(npcTraits || []).filter(t => t.category === cat).map(trait => (
+                                            <div key={trait.id} className="flex items-center justify-between bg-gray-900 border border-gray-700 rounded p-2 text-xs text-gray-300">
+                                                <div>
+                                                    <div>{trait.text}</div>
+                                                    {trait.tags && <div className="text-[10px] text-gray-500 italic">{trait.tags}</div>}
+                                                </div>
+                                                <button onClick={() => handleDeleteTrait(trait.id)} className="text-gray-500 hover:text-red-500"><Trash2 size={12}/></button>
+                                            </div>
+                                        ))}
+                                        {(npcTraits || []).filter(t => t.category === cat).length === 0 && <div className="text-[10px] text-gray-500 italic">No traits yet.</div>}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+const NpcPickerWindowContent = ({ npcCatalog, onPick, onSaveNpc, close, openWindow }) => {
+    const [search, setSearch] = useState('');
+    const [selectedId, setSelectedId] = useState(null);
+
+    const filtered = npcCatalog.filter(npc => {
+        const haystack = `${npc.name} ${npc.race} ${npc.role} ${npc.tags}`.toLowerCase();
+        return haystack.includes(search.toLowerCase());
+    });
+
+    const selectedNpc = filtered.find(npc => npc.id === selectedId) || npcCatalog.find(npc => npc.id === selectedId);
+
+    const handlePick = () => {
+        if (!selectedNpc) return;
+        onPick?.(selectedNpc);
+        close?.();
+    };
+
+    return (
+        <div className="h-full flex flex-col gap-3">
+            <div className="flex gap-2 items-center">
+                <Search size={14} className="text-gray-500"/>
+                <input className="flex-1 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-sm text-white focus:border-green-500 outline-none" placeholder="Search NPCs..." value={search} onChange={e => setSearch(e.target.value)} />
+                <button onClick={() => openWindow?.('NPC_BUILDER', { onSave: (npc) => { onSaveNpc?.(npc); onPick?.(npc); close?.(); } }, 'New NPC')} className="bg-green-700 hover:bg-green-600 text-white px-2 py-1 rounded text-xs font-bold flex items-center gap-1"><Plus size={12}/> New</button>
+            </div>
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+                {filtered.map(npc => (
+                    <div key={npc.id} onClick={() => setSelectedId(npc.id)} className={`p-2 rounded border cursor-pointer ${selectedId === npc.id ? 'bg-indigo-900/30 border-indigo-500' : 'bg-gray-800 border-gray-700 hover:border-gray-500'}`}>
+                        <div className="font-bold text-sm text-white">{npc.name}</div>
+                        <div className="text-[10px] text-gray-500">{npc.race || 'Unknown'} • {npc.role || 'Role'}</div>
+                    </div>
+                ))}
+                {filtered.length === 0 && <div className="text-gray-500 text-xs italic text-center mt-4">No NPCs found.</div>}
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-gray-800">
+                <button onClick={close} className="text-xs text-gray-400 hover:text-white">Cancel</button>
+                <button onClick={handlePick} className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded text-xs font-bold" disabled={!selectedNpc}>Pick NPC</button>
+            </div>
+        </div>
+    );
+};
+
+const EncounterManagerWindowContent = ({ encounters, setEncounters, openWindow }) => {
+    const [selectedId, setSelectedId] = useState(null);
+    const selectedEncounter = encounters.find(e => e.id === selectedId);
+
+    const createEncounter = () => {
+        const newEnc = { id: Date.now(), name: 'New Encounter', description: '', enemies: [] };
+        setEncounters(prev => [...prev, newEnc]);
+        setSelectedId(newEnc.id);
+    };
+
+    const updateSelected = (field, value) => {
+        setEncounters(prev => prev.map(e => e.id === selectedId ? { ...e, [field]: value } : e));
+    };
+
+    const deleteEncounter = (id, e) => {
+        e.stopPropagation();
+        if(window.confirm('Delete this encounter?')) {
+            setEncounters(prev => prev.filter(enc => enc.id !== id));
+            if(selectedId === id) setSelectedId(null);
+        }
+    };
+
+    const handleAddEnemies = () => {
+         openWindow('BESTIARY_PICKER', { onPick: (advs) => {
+            const grouped = advs.reduce((acc, adv) => {
+                if (!acc[adv.name]) {
+                    acc[adv.name] = { ...adv, id: Date.now() + Math.random(), instances: Array.from({length: 1}).map((_, i) => ({ id: Date.now() + i, hp: 0, stress: 0 })) };
+                } else {
+                    acc[adv.name].instances.push({ id: Date.now() + Math.random(), hp: 0, stress: 0 });
+                }
+                return acc;
+            }, {});
+
+            setEncounters(prev => {
+                const currentEnc = prev.find(e => e.id === selectedId);
+                if(!currentEnc) return prev;
+
+                const currentEnemies = [...(currentEnc.enemies || [])];
+                Object.values(grouped).forEach(newGroup => {
+                    const existingGroupIndex = currentEnemies.findIndex(e => e.name === newGroup.name);
+                    if (existingGroupIndex >= 0) {
+                        currentEnemies[existingGroupIndex].instances.push(...newGroup.instances);
+                    } else {
+                        currentEnemies.push(newGroup);
+                    }
+                });
+
+                return prev.map(e => e.id === selectedId ? { ...e, enemies: currentEnemies } : e);
+            });
+         }}, 'Select Adversary');
+    };
+
+    const removeEnemyGroup = (enemyId) => {
+        setEncounters(prev => {
+            return prev.map(enc => {
+                if(enc.id !== selectedId) return enc;
+                return { ...enc, enemies: enc.enemies.filter(e => e.id !== enemyId) };
+            });
+        });
+    };
+
+    const calculateDiff = (enemies) => {
+        return enemies.reduce((sum, e) => sum + (parseInt(e.difficulty || 0) * (e.instances?.length || 1)), 0);
+    };
+
+    return (
+        <div className="h-full flex gap-4">
+            <div className="w-1/3 flex flex-col min-w-0 border-r border-gray-700 pr-2">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-bold text-gray-200">Encounters</h3>
+                    <button onClick={createEncounter} className="bg-green-700 hover:bg-green-600 text-white px-2 py-1 rounded text-xs flex items-center gap-1"><Plus size={12}/> New</button>
+                </div>
+                <div className="flex-1 overflow-y-auto space-y-2">
+                    {encounters.map(enc => (
+                        <div
+                            key={enc.id}
+                            onClick={() => setSelectedId(enc.id)}
+                            className={`p-3 rounded border cursor-pointer group flex justify-between items-center ${selectedId === enc.id ? 'bg-indigo-900/30 border-indigo-500' : 'bg-gray-800 border-gray-700 hover:border-gray-500'}`}
+                        >
+                            <div>
+                                <div className="font-bold text-sm text-white">{enc.name}</div>
+                                <div className="text-[10px] text-gray-500">{(enc.enemies || []).length} Groups • Diff: {calculateDiff(enc.enemies || [])}</div>
+                            </div>
+                            <button onClick={(e) => deleteEncounter(enc.id, e)} className="text-gray-600 hover:text-red-500 opacity-0 group-hover:opacity-100"><Trash2 size={14}/></button>
+                        </div>
+                    ))}
+                    {encounters.length === 0 && <div className="text-gray-500 text-center text-xs italic mt-4">No encounters built.</div>}
+                </div>
+            </div>
+
+            <div className="flex-1 flex flex-col min-w-0">
+                {selectedEncounter ? (
+                    <>
+                        <div className="mb-4 space-y-2">
+                            <input className="w-full bg-transparent text-2xl font-bold text-white border-b border-gray-700 focus:border-indigo-500 outline-none pb-2" value={selectedEncounter.name} onChange={e => updateSelected('name', e.target.value)} placeholder="Encounter Name" />
+                            <textarea className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-gray-300 resize-none h-20 focus:outline-none focus:border-indigo-500" value={selectedEncounter.description} onChange={e => updateSelected('description', e.target.value)} placeholder="Encounter description or setup notes..." />
+                        </div>
+
+                        <div className="flex justify-between items-center mb-2 bg-gray-900 p-2 rounded border border-gray-700">
+                            <h4 className="font-bold text-red-400 flex items-center gap-2"><Sword size={16}/> Enemies</h4>
+                            <button onClick={handleAddEnemies} className="bg-indigo-800 hover:bg-indigo-700 text-white px-3 py-1 rounded text-xs flex items-center gap-1"><Book size={12}/> Add from Bestiary</button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto grid grid-cols-1 gap-3 content-start">
+                            {(selectedEncounter.enemies || []).map((enemy) => (
+                                <div key={enemy.id} className="bg-gray-800 border border-gray-700 rounded p-3 relative">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div>
+                                            <div className="font-bold text-white">{enemy.name} <span className="text-gray-500 text-xs">x{enemy.instances?.length || 0}</span></div>
+                                            <div className="text-xs text-gray-400">{enemy.type} • Tier {enemy.tier}</div>
+                                        </div>
+                                        <button onClick={() => removeEnemyGroup(enemy.id)} className="text-gray-500 hover:text-red-500"><X size={16}/></button>
+                                    </div>
+                                    <div className="flex gap-2 text-xs text-gray-500 bg-black/20 p-2 rounded">
+                                        <div>HP: {enemy.hp}</div>
+                                        <div>Stress: {enemy.stress}</div>
+                                        <div>Diff: {enemy.difficulty}</div>
+                                        <div>Atk: {enemy.attack}</div>
+                                    </div>
+                                </div>
+                            ))}
+                            {(selectedEncounter.enemies || []).length === 0 && <div className="text-gray-600 text-center italic text-sm mt-10">No enemies added to this encounter.</div>}
+                        </div>
+                    </>
+                ) : (
+                    <div className="flex items-center justify-center h-full text-gray-600 italic">Select an encounter to edit.</div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+const CombatWindowContent = ({ node, updateNode, openWindow, library, party, savedEncounters }) => {
+    const [view, setView] = useState('SETUP');
+    const [turnOrder, setTurnOrder] = useState([]);
+    const [round, setRound] = useState(node?.combatState?.round || 1);
+    const [turnIndex, setTurnIndex] = useState(node?.combatState?.turnIndex || 0);
+
+    useEffect(() => {
+        if (!node) return;
+        if (view === 'TRACKER') {
+            if (node.combatState?.combatants) {
+                setTurnOrder(node.combatState.combatants);
+                setRound(node.combatState.round);
+                setTurnIndex(node.combatState.turnIndex);
+            } else {
+                const combatants = [];
+                party.forEach(p => combatants.push({
+                    id: p.id, type: 'pc', name: p.name, initiative: 0,
+                    hp: p.hp, maxHp: p.maxHp, stress: p.stress, maxStress: p.maxStress, status: ''
+                }));
+                (node.enemies || []).forEach(e => {
+                    if (e.instances && e.instances.length > 0) {
+                        e.instances.forEach((inst, idx) => {
+                            combatants.push({
+                                id: inst.id, type: 'enemy', name: `${e.name} ${idx+1}`,
+                                enemyId: e.id, instanceId: inst.id,
+                                initiative: 0, hp: inst.hp, maxHp: parseInt(e.hp), stress: inst.stress, maxStress: parseInt(e.stress), status: ''
+                            });
+                        });
+                    }
+                });
+                setTurnOrder(combatants);
+            }
+        }
+    }, [view, node, party]);
+
+    useEffect(() => {
+        if (!node) return;
+        if (view === 'TRACKER' && turnOrder.length > 0) {
+            updateNode(node.id, {
+                combatState: { round, turnIndex, combatants: turnOrder }
+            });
+        }
+    }, [turnOrder, round, turnIndex, view, node, updateNode]);
+
+    if (!node) {
+        return <div className="text-gray-400">Combat data unavailable.</div>;
+    }
+
+    const handleSortInitiative = () => {
+        const sorted = [...turnOrder].sort((a, b) => parseInt(b.initiative || 0) - parseInt(a.initiative || 0));
+        setTurnOrder(sorted);
+        setTurnIndex(0);
+    };
+
+    const nextTurn = () => {
+        if (turnIndex >= turnOrder.length - 1) {
+            setTurnIndex(0);
+            setRound(r => r + 1);
+        } else {
+            setTurnIndex(i => i + 1);
+        }
+    };
+
+    const updateCombatant = (id, field, value) => {
+        setTurnOrder(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c));
+    };
+
+    const handlePickFromBestiary = () => {
+         openWindow('BESTIARY_PICKER', { onPick: (advs) => {
+            const grouped = advs.reduce((acc, adv) => {
+                if (!acc[adv.name]) {
+                    acc[adv.name] = { ...adv, id: Date.now() + Math.random(), instances: Array.from({length: 1}).map((_, i) => ({ id: Date.now() + i, hp: 0, stress: 0 })) };
+                } else {
+                    acc[adv.name].instances.push({ id: Date.now() + Math.random(), hp: 0, stress: 0 });
+                }
+                return acc;
+            }, {});
+            const currentEnemies = [...(node.enemies || [])];
+            Object.values(grouped).forEach(newGroup => {
+                const existingGroupIndex = currentEnemies.findIndex(e => e.name === newGroup.name);
+                if (existingGroupIndex >= 0) {
+                    currentEnemies[existingGroupIndex].instances.push(...newGroup.instances);
+                } else {
+                    currentEnemies.push(newGroup);
+                }
+            });
+            updateNode(node.id, { enemies: currentEnemies });
+         }}, 'Select Adversary');
+    };
+
+    const handleLoadEncounter = (encounter) => {
+        if (!encounter || !encounter.enemies) return;
+
+        const newEnemies = encounter.enemies.map(e => ({
+            ...e,
+            id: Date.now() + Math.random(),
+            instances: (e.instances || []).map(inst => ({ ...inst, id: Date.now() + Math.random() }))
+        }));
+
+        const currentEnemies = [...(node.enemies || [])];
+        updateNode(node.id, { enemies: [...currentEnemies, ...newEnemies] });
+    };
+
+    const updateInstance = (enemyId, instanceId, field, value) => {
+        const updatedEnemies = node.enemies.map(e => {
+            if (e.id === enemyId) return { ...e, instances: e.instances.map(inst => inst.id === instanceId ? { ...inst, [field]: value } : inst) };
+            return e;
+        });
+        updateNode(node.id, { enemies: updatedEnemies });
+    };
+
+    const deleteInstance = (enemyId, instanceId) => {
+        const updatedEnemies = node.enemies.map(e => {
+            if (e.id === enemyId) return { ...e, instances: e.instances.filter(inst => inst.id !== instanceId) };
+            return e;
+        }).filter(e => e.instances.length > 0);
+        updateNode(node.id, { enemies: updatedEnemies });
+    };
+
+    const toggleHp = (enemyId, instanceId, idx) => {
+        const enemy = node.enemies.find(e => e.id === enemyId);
+        const instance = enemy.instances.find(i => i.id === instanceId);
+        let newVal = idx + 1;
+        if (instance.hp === newVal) newVal = idx;
+        updateInstance(enemyId, instanceId, 'hp', newVal);
+    };
+
+    const toggleStress = (enemyId, instanceId, idx) => {
+        const enemy = node.enemies.find(e => e.id === enemyId);
+        const instance = enemy.instances.find(i => i.id === instanceId);
+        let newVal = idx + 1;
+        if (instance.stress === newVal) newVal = idx;
+        updateInstance(enemyId, instanceId, 'stress', newVal);
+    };
+
+    return (
+        <div className="h-full flex flex-col">
+            <div className="flex gap-2 mb-2 p-1 bg-gray-900 rounded border border-gray-700">
+                <button onClick={() => setView('SETUP')} className={`flex-1 py-1 text-xs font-bold uppercase rounded ${view === 'SETUP' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-800'}`}>Setup / Enemies</button>
+                <button onClick={() => setView('TRACKER')} className={`flex-1 py-1 text-xs font-bold uppercase rounded ${view === 'TRACKER' ? 'bg-red-600 text-white' : 'text-gray-400 hover:bg-gray-800'}`}>Initiative Tracker</button>
+            </div>
+
+            {view === 'SETUP' && (
+                <>
+                    <div className="flex justify-between items-center mb-4 flex-shrink-0 bg-gray-900 p-2 rounded border border-gray-700">
+                        <div className="flex items-center gap-4">
+                            <h3 className="text-lg font-bold text-red-400 flex items-center gap-2"><Sword size={18}/> Adversaries</h3>
+                        </div>
+                        <div className="flex gap-2">
+                            {savedEncounters && savedEncounters.length > 0 && (
+                                <select
+                                    className="bg-gray-800 border border-gray-700 rounded text-xs px-2 py-1 text-white max-w-[150px]"
+                                    onChange={(e) => {
+                                        const enc = savedEncounters.find(en => en.id === parseInt(e.target.value));
+                                        if(enc) handleLoadEncounter(enc);
+                                        e.target.value = "";
+                                    }}
+                                    value=""
+                                >
+                                    <option value="" disabled>Load Encounter...</option>
+                                    {savedEncounters.map(enc => (
+                                        <option key={enc.id} value={enc.id}>{enc.name}</option>
+                                    ))}
+                                </select>
+                            )}
+                            <button onClick={handlePickFromBestiary} className="bg-indigo-900 hover:bg-indigo-800 text-white px-3 py-1 rounded text-sm flex items-center gap-1"><Book size={14}/> Add from Library</button>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4 pb-4 flex-1 overflow-y-auto min-h-0">
+                        {(node.enemies || []).map(enemy => (
+                            <div key={enemy.id} className="dh-card p-3 relative group h-fit">
+                                <div className="flex justify-between items-end border-b border-gray-700 pb-2 mb-2">
+                                    <div>
+                                        <div className="font-bold text-lg text-white">{enemy.name} <span className="text-sm text-gray-500 font-normal">x{(enemy.instances || []).length}</span></div>
+                                        <div className="text-[10px] text-gray-400">{enemy.type} • {enemy.tier}</div>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center justify-between bg-black/30 p-2 rounded mb-3 text-xs border border-gray-700/50">
+                                    <div className="flex gap-3">
+                                        <div className="text-center">
+                                            <div className="text-[9px] uppercase text-gray-500 font-bold">Diff</div>
+                                            <div className="font-bold text-white text-sm">{enemy.difficulty}</div>
+                                        </div>
+                                        <div className="text-center">
+                                            <div className="text-[9px] uppercase text-gray-500 font-bold">Atk</div>
+                                            <div className="font-bold text-red-300 text-sm">{enemy.attack}</div>
+                                        </div>
+                                    </div>
+                                    <div className="h-6 w-px bg-gray-700"></div>
+                                    <div className="flex gap-3">
+                                        <div className="text-center">
+                                            <div className="text-[9px] uppercase text-gray-500 font-bold">Major</div>
+                                            <div className="font-bold text-white text-sm">{enemy.thresholds?.major || '-'}</div>
+                                        </div>
+                                        <div className="text-center">
+                                            <div className="text-[9px] uppercase text-gray-500 font-bold">Severe</div>
+                                            <div className="font-bold text-white text-sm">{enemy.thresholds?.severe || '-'}</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex flex-col gap-2 mb-3 bg-black/20 p-2 rounded">
+                                     <div className="flex justify-between text-[9px] font-bold text-gray-500 uppercase px-1">
+                                         <span>Instance</span><span>HP (Max {enemy.hp})</span><span>Stress (Max {enemy.stress})</span><span></span>
+                                     </div>
+                                     {(enemy.instances || []).map((inst, idx) => (
+                                         <div key={inst.id} className="flex items-center justify-between bg-gray-900/50 p-1 rounded border border-gray-700/50">
+                                             <span className="text-xs font-mono text-gray-400 w-6 text-center">{idx + 1}</span>
+                                             <div className="flex gap-1">
+                                                 {Array.from({length: parseInt(enemy.hp) || 1}).map((_, i) => (
+                                                     <div key={i} onClick={() => toggleHp(enemy.id, inst.id, i)} className={`dh-checkbox ${i < (inst.hp || 0) ? 'filled' : ''}`}></div>
+                                                 ))}
+                                             </div>
+                                             <div className="flex gap-1">
+                                                 {Array.from({length: parseInt(enemy.stress) || 0}).map((_, i) => (
+                                                     <div key={i} onClick={() => toggleStress(enemy.id, inst.id, i)} className={`dh-checkbox stress ${i < (inst.stress || 0) ? 'filled' : ''}`}></div>
+                                                 ))}
+                                             </div>
+                                             <button onClick={() => deleteInstance(enemy.id, inst.id)} className="text-gray-600 hover:text-red-500"><Trash2 size={12}/></button>
+                                         </div>
+                                     ))}
+                                     <button onClick={() => {
+                                            const newInst = { id: Date.now() + Math.random(), hp: 0, stress: 0 };
+                                            const updatedInstances = [...enemy.instances, newInst];
+                                            const updatedEnemies = node.enemies.map(e => e.id === enemy.id ? { ...e, instances: updatedInstances } : e);
+                                            updateNode(node.id, { enemies: updatedEnemies });
+                                     }} className="text-[10px] text-center text-gray-500 hover:text-white bg-gray-800 hover:bg-gray-700 py-1 rounded mt-1">+ Add Instance</button>
+                                </div>
+
+                                {(enemy.features || []).length > 0 && (
+                                    <div className="space-y-2 mb-3">
+                                        <div className="text-[10px] uppercase font-bold text-gray-500 px-1">Features</div>
+                                        {enemy.features.map(feat => (
+                                            <div key={feat.id} className="bg-gray-800/60 p-2 rounded border border-indigo-900/30 text-xs">
+                                                <div className="flex justify-between items-start mb-1">
+                                                    <span className="font-bold text-indigo-200">{feat.name}</span>
+                                                    <div className="flex gap-1">
+                                                        {feat.fearCost && <span className="text-[9px] bg-purple-900/50 text-purple-300 px-1.5 rounded border border-purple-800 font-bold">{feat.fearCost} Fear</span>}
+                                                        <span className="text-[9px] text-gray-500 uppercase bg-black/30 px-1.5 rounded">{feat.type}</span>
+                                                    </div>
+                                                </div>
+                                                <div className="text-gray-300 text-[11px] leading-relaxed">{feat.description}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                <div className="space-y-1 mb-3">
+                                    <div className="text-[10px] uppercase font-bold text-gray-500 px-1">Attacks</div>
+                                    {(enemy.attacks || []).map((atk, i) => (
+                                        <div key={i} className="flex justify-between text-xs bg-gray-800 p-1.5 rounded border border-gray-700">
+                                            <span className="font-bold text-red-200">{atk.name} <span className="font-normal text-gray-500">({atk.range})</span></span>
+                                            <span className="font-mono text-red-400">{atk.mod} / {atk.damage}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </>
+            )}
+
+            {view === 'TRACKER' && (
+                <div className="flex-1 flex flex-col">
+                    <div className="flex justify-between items-center bg-gray-900 p-2 rounded mb-2 border border-gray-700">
+                        <div className="flex items-center gap-4">
+                            <div className="text-center bg-black/40 p-1 px-2 rounded border border-gray-700">
+                                <div className="text-[10px] uppercase text-gray-500 font-bold">Round</div>
+                                <div className="text-xl font-bold text-white">{round}</div>
+                            </div>
+                            <button onClick={handleSortInitiative} className="bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1 rounded text-xs border border-gray-600">Sort by Init</button>
+                            <button onClick={() => { setTurnOrder([]); setRound(1); setTurnIndex(0); updateNode(node.id, { combatState: null }); }} className="text-gray-500 hover:text-red-500 text-xs flex items-center gap-1"><RotateCcw size={12}/> Reset</button>
+                        </div>
+                        <button onClick={nextTurn} className="bg-green-700 hover:bg-green-600 text-white px-4 py-2 rounded font-bold shadow-lg flex items-center gap-2"><SkipForward size={16}/> Next Turn</button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto min-h-0 bg-gray-900/30 rounded border border-gray-700 p-2 space-y-1">
+                        <div className="grid grid-cols-12 gap-2 px-2 py-1 text-[10px] uppercase font-bold text-gray-500">
+                            <div className="col-span-1 text-center">Active</div>
+                            <div className="col-span-1 text-center">Init</div>
+                            <div className="col-span-4">Name</div>
+                            <div className="col-span-3 text-center">Status</div>
+                            <div className="col-span-3 text-center">HP / Stress</div>
+                        </div>
+                        {turnOrder.map((c, i) => (
+                            <div key={c.id} className={`grid grid-cols-12 gap-2 items-center p-2 rounded border border-gray-700 transition-all ${i === turnIndex ? 'combat-row-active border-indigo-500' : 'bg-gray-800'}`}>
+                                <div className="col-span-1 flex justify-center">
+                                    {i === turnIndex && <Play size={16} className="text-indigo-400 fill-indigo-400"/>}
+                                </div>
+                                <div className="col-span-1">
+                                    <input type="number" className="w-full bg-black/30 border border-gray-600 rounded text-center text-sm font-bold text-white" value={c.initiative} onChange={e => updateCombatant(c.id, 'initiative', e.target.value)} />
+                                </div>
+                                <div className="col-span-4 flex items-center gap-2">
+                                    {c.type === 'pc' ? <User size={14} className="text-blue-400"/> : <Skull size={14} className="text-red-400"/>}
+                                    <span className={`font-bold text-sm ${c.type === 'pc' ? 'text-blue-100' : 'text-red-100'}`}>{c.name}</span>
+                                </div>
+                                <div className="col-span-3">
+                                    <input className="w-full bg-black/30 border border-gray-600 rounded px-2 py-1 text-xs text-yellow-200" placeholder="Status..." value={c.status} onChange={e => updateCombatant(c.id, 'status', e.target.value)} />
+                                </div>
+                                <div className="col-span-3 flex gap-2 justify-center">
+                                    <div className="flex items-center gap-1 bg-black/30 px-2 rounded border border-gray-700">
+                                        <span className="text-[10px] text-red-500 font-bold">HP</span>
+                                        <input className="w-8 bg-transparent text-center text-sm font-bold text-white outline-none" value={c.hp} onChange={e => updateCombatant(c.id, 'hp', e.target.value)} />
+                                    </div>
+                                    <div className="flex items-center gap-1 bg-black/30 px-2 rounded border border-gray-700">
+                                        <span className="text-[10px] text-purple-500 font-bold">STR</span>
+                                        <input className="w-8 bg-transparent text-center text-sm font-bold text-white outline-none" value={c.stress} onChange={e => updateCombatant(c.id, 'stress', e.target.value)} />
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const BestiaryPickerWindowContent = ({ library, onPick, close }) => {
+    const [search, setSearch] = useState('');
+    const [selected, setSelected] = useState([]);
+
+    const [typeFilter, setTypeFilter] = useState('All');
+    const [tierFilter, setTierFilter] = useState('All');
+    const [creatureFilter, setCreatureFilter] = useState('All');
+    const [biomeFilter, setBiomeFilter] = useState('All');
+
+    const filtered = library.filter(adv => {
+        const matchesSearch = adv.name.toLowerCase().includes(search.toLowerCase()) || adv.tags.toLowerCase().includes(search.toLowerCase());
+        const matchesType = typeFilter === 'All' || adv.type === typeFilter;
+        const matchesTier = tierFilter === 'All' || adv.tier === tierFilter;
+        const matchesCreature = creatureFilter === 'All' || adv.creatureType === creatureFilter;
+        const matchesBiome = biomeFilter === 'All' || adv.biome === biomeFilter;
+        return matchesSearch && matchesType && matchesTier && matchesCreature && matchesBiome;
+    });
+
+    const addToSelected = (adv) => {
+        setSelected(prev => {
+            const existing = prev.find(p => p.id === adv.id);
+            if (existing) {
+                return prev.map(p => p.id === adv.id ? { ...p, count: p.count + 1 } : p);
+            }
+            return [...prev, { ...adv, count: 1 }];
+        });
+    };
+
+    const removeFromSelected = (advId) => {
+        setSelected(prev => {
+            const existing = prev.find(p => p.id === advId);
+            if (existing.count > 1) {
+                return prev.map(p => p.id === advId ? { ...p, count: p.count - 1 } : p);
+            }
+            return prev.filter(p => p.id !== advId);
+        });
+    };
+
+    const confirmSelection = () => {
+        const enemiesToAdd = selected.flatMap(s =>
+            Array.from({length: s.count}).map(() => ({ ...s }))
+        );
+
+        onPick(enemiesToAdd);
+        close();
+    };
+
+    return (
+        <div className="h-full flex gap-4">
+            <div className="flex-1 flex flex-col min-w-0">
+                <div className="flex flex-col gap-2 mb-2">
+                    <input className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)}/>
+                    <div className="flex gap-1 flex-wrap">
+                        <select className="bg-gray-800 border border-gray-700 rounded text-xs px-1 py-1 text-gray-300" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}><option value="All">All Types</option>{ADVERSARY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                        <select className="bg-gray-800 border border-gray-700 rounded text-xs px-1 py-1 text-gray-300" value={tierFilter} onChange={e => setTierFilter(e.target.value)}><option value="All">All Tiers</option>{[0,1,2,3,4].map(t => <option key={t} value={String(t)}>Tier {t}</option>)}</select>
+                        <select className="bg-gray-800 border border-gray-700 rounded text-xs px-1 py-1 text-gray-300" value={creatureFilter} onChange={e => setCreatureFilter(e.target.value)}><option value="All">All Creatures</option>{CREATURE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                        <select className="bg-gray-800 border border-gray-700 rounded text-xs px-1 py-1 text-gray-300" value={biomeFilter} onChange={e => setBiomeFilter(e.target.value)}><option value="All">All Biomes</option>{BIOMES.map(b => <option key={b} value={b}>{b}</option>)}</select>
+                    </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto min-h-0 space-y-2 pr-1">
+                    {filtered.map(adv => (
+                        <div key={adv.id} onClick={() => addToSelected(adv)} className="bg-gray-800 hover:bg-gray-700 p-2 rounded cursor-pointer border border-gray-700 flex justify-between items-center group">
+                            <div>
+                                <div className="font-bold text-sm">{adv.name}</div>
+                                <div className="text-[10px] text-gray-400">{adv.type} • Tier {adv.tier}</div>
+                            </div>
+                            <div className="text-xs font-bold text-indigo-400 flex items-center gap-2">
+                                {adv.difficulty} <Plus size={14} className="opacity-0 group-hover:opacity-100"/>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            <div className="w-1/3 bg-gray-900 border-l border-gray-800 pl-4 flex flex-col">
+                <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">Selected Squad</h4>
+                <div className="flex-1 overflow-y-auto space-y-2 mb-4">
+                    {selected.map(s => (
+                        <div key={s.id} className="flex justify-between items-center bg-black/20 p-2 rounded">
+                            <span className="text-sm font-bold truncate">{s.name}</span>
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => removeFromSelected(s.id)} className="text-gray-500 hover:text-white"><Minus size={12}/></button>
+                                <span className="text-xs font-mono">{s.count}</span>
+                                <button onClick={() => addToSelected(s)} className="text-gray-500 hover:text-white"><Plus size={12}/></button>
+                            </div>
+                        </div>
+                    ))}
+                    {selected.length === 0 && <div className="text-xs text-gray-600 italic text-center mt-4">No adversaries selected.</div>}
+                </div>
+                <button
+                    onClick={confirmSelection}
+                    disabled={selected.length === 0}
+                    className={`w-full py-2 rounded font-bold text-sm ${selected.length > 0 ? 'bg-indigo-600 hover:bg-indigo-500 text-white' : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}
+                >
+                    Add to Combat
+                </button>
+            </div>
+        </div>
+    );
+};
+
+const AdversaryBuilderWindow = ({ onSave, initialData, close }) => {
+    const [data, setData] = useState(initialData || {
+        id: Date.now(),
+        name: '',
+        tier: '0',
+        type: 'Standard',
+        creatureType: 'Humanoid',
+        biome: 'Plains',
+        tags: '',
+        difficulty: '10',
+        experiences: '',
+        motives: '',
+        attacks: [],
+        hp: '1',
+        stress: '0',
+        thresholds: { major: '', severe: '' },
+        features: [],
+        environment: false
+    });
+
+    const handleSave = () => { onSave(data); close(); };
+    const addAttack = () => setData({...data, attacks: [...data.attacks, { id: Date.now(), name: '', range: 'Melee', mod: '', damage: '' }]});
+    const updateAttack = (id, field, value) => setData({...data, attacks: data.attacks.map(atk => atk.id === id ? { ...atk, [field]: value } : atk)});
+    const deleteAttack = (id) => setData({...data, attacks: data.attacks.filter(atk => atk.id !== id)});
+
+    const addFeature = () => setData({...data, features: [...data.features, { id: Date.now(), name: '', type: 'Action', description: '', flavorText: '', fearCost: '', stressCost: '', hpCost: '', maxUses: '', passiveValue: '' }]});
+    const updateFeature = (id, field, value) => setData({...data, features: data.features.map(f => f.id === id ? { ...f, [field]: value } : f)});
+    const deleteFeature = (id) => setData({...data, features: data.features.filter(f => f.id !== id)});
+
+    return (
+        <div className="h-full flex flex-col gap-4">
+            <div className="dh-card p-4 flex-1 overflow-y-auto min-h-0">
+                <div className="flex gap-4 mb-4">
+                    <div className="flex-1">
+                        <label className="text-[10px] uppercase text-gray-500 font-bold">Name</label>
+                        <input className="w-full bg-transparent text-xl font-bold text-white border-b border-gray-600 focus:border-red-500 outline-none" value={data.name} onChange={e => setData({...data, name: e.target.value})} placeholder="Adversary Name"/>
+                    </div>
+                    <div className="w-20">
+                        <label className="text-[10px] uppercase text-gray-500 font-bold">Tier</label>
+                        <select className="w-full bg-transparent text-xl font-bold text-white border-b border-gray-600 focus:border-red-500 outline-none text-center" value={data.tier} onChange={e => setData({...data, tier: e.target.value})}>
+                            {[0,1,2,3,4].map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                    <div><label className="text-[9px] uppercase text-gray-500 font-bold">Adversary Type</label><select className="w-full bg-gray-800 text-xs p-2 rounded border border-gray-700 text-gray-300" value={data.type} onChange={e => setData({...data, type: e.target.value})}>{ADVERSARY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                    <div><label className="text-[9px] uppercase text-gray-500 font-bold">Creature Type</label><select className="w-full bg-gray-800 text-xs p-2 rounded border border-gray-700 text-gray-300" value={data.creatureType} onChange={e => setData({...data, creatureType: e.target.value})}>{CREATURE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                    <div><label className="text-[9px] uppercase text-gray-500 font-bold">Biome</label><select className="w-full bg-gray-800 text-xs p-2 rounded border border-gray-700 text-gray-300" value={data.biome} onChange={e => setData({...data, biome: e.target.value})}>{BIOMES.map(b => <option key={b} value={b}>{b}</option>)}</select></div>
+                    <div><label className="text-[9px] uppercase text-gray-500 font-bold">Tags</label><input className="w-full bg-gray-800 text-xs p-2 rounded border border-gray-700 text-gray-300" placeholder="e.g. Skeleton, Trap" value={data.tags} onChange={e => setData({...data, tags: e.target.value})}/></div>
+                </div>
+
+                <div className="grid grid-cols-4 gap-3 mb-6">
+                    <div className="col-span-1 dh-stat-box"><div className="text-[9px] uppercase text-gray-500 font-bold mb-1">Difficulty</div><input className="w-full bg-transparent text-center font-bold text-lg text-white" value={data.difficulty} onChange={e => setData({...data, difficulty: e.target.value})} placeholder="12"/></div>
+                    <div className="col-span-1 dh-stat-box"><div className="text-[9px] uppercase text-gray-500 font-bold mb-1">Attack Mod</div><input className="w-full bg-transparent text-center font-bold text-lg text-red-400" value={data.attack} onChange={e => setData({...data, attack: e.target.value})} placeholder="+0"/></div>
+                    <div className="col-span-2 bg-gray-900/50 p-2 rounded border border-gray-700"><label className="text-[9px] uppercase text-gray-500 font-bold block mb-1">Experiences</label><textarea className="w-full bg-transparent text-sm text-gray-300 resize-none h-12 focus:outline-none" value={data.experiences} onChange={e => setData({...data, experiences: e.target.value})} placeholder="Alertness +2, Sneaky +1..."/></div>
+                </div>
+
+                 <div className="mb-4 bg-gray-900/50 p-2 rounded border border-gray-700">
+                    <label className="text-[9px] uppercase text-gray-500 font-bold block mb-1">Motives & Tactics</label>
+                    <textarea className="w-full bg-transparent text-sm text-gray-300 resize-none h-16 focus:outline-none" value={data.motives} onChange={e => setData({...data, motives: e.target.value})} placeholder="To protect the queen..."/>
+                 </div>
+
+                <div className="mb-6">
+                    <div className="flex justify-between items-center mb-2"><label className="text-[10px] uppercase text-gray-500 font-bold">Attacks & Weapons</label><button onClick={addAttack} className="text-[10px] bg-red-900 hover:bg-red-800 text-red-200 px-2 py-1 rounded flex items-center gap-1">+ Add Attack</button></div>
+                    <div className="space-y-2">
+                        {data.attacks.map(atk => (
+                            <div key={atk.id} className="grid grid-cols-12 gap-2 items-center bg-gray-800 p-2 rounded border border-gray-700">
+                                <input className="col-span-4 bg-transparent border-b border-gray-600 text-sm text-white focus:border-red-500 outline-none" placeholder="Weapon Name" value={atk.name} onChange={e => updateAttack(atk.id, 'name', e.target.value)} />
+                                <select className="col-span-3 bg-transparent border-b border-gray-600 text-xs text-gray-400 focus:border-red-500 outline-none" value={atk.range} onChange={e => updateAttack(atk.id, 'range', e.target.value)}>{ATTACK_RANGES.map(r => <option key={r} value={r}>{r}</option>)}</select>
+                                <input className="col-span-2 bg-transparent border-b border-gray-600 text-sm text-red-300 font-bold focus:border-red-500 outline-none text-center" placeholder="+3" value={atk.mod} onChange={e => updateAttack(atk.id, 'mod', e.target.value)} />
+                                <input className="col-span-2 bg-transparent border-b border-gray-600 text-sm text-gray-200 focus:border-red-500 outline-none text-right" placeholder="1d8+2" value={atk.damage} onChange={e => updateAttack(atk.id, 'damage', e.target.value)} />
+                                <button onClick={() => deleteAttack(atk.id)} className="col-span-1 text-gray-600 hover:text-red-500 flex justify-center"><Trash2 size={12}/></button>
+                            </div>
+                        ))}
+                        {data.attacks.length === 0 && <div className="text-xs text-gray-600 italic text-center p-2">No attacks added.</div>}
+                    </div>
+                </div>
+
+                <div className="bg-gray-900/50 p-3 rounded border border-gray-700 mb-6">
+                    <label className="text-[10px] uppercase text-gray-500 font-bold mb-2 block">Damage Thresholds & Health</label>
+                    <div className="grid grid-cols-2 gap-4 mb-2">
+                        <div className="text-center"><span className="block text-[9px] text-gray-500">Major</span><input className="w-full bg-gray-800 border border-gray-600 rounded text-center text-sm" value={data.thresholds.major} onChange={e => setData({...data, thresholds: {...data.thresholds, major: e.target.value}})} placeholder="X"/></div>
+                        <div className="text-center"><span className="block text-[9px] text-gray-500">Severe</span><input className="w-full bg-gray-800 border border-gray-600 rounded text-center text-sm" value={data.thresholds.severe} onChange={e => setData({...data, thresholds: {...data.thresholds, severe: e.target.value}})} placeholder="Y+"/></div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 border-t border-gray-700 pt-2 mt-2">
+                        <div className="flex items-center justify-between"><span className="text-xs text-gray-400 font-bold">Hit Points</span><input className="w-16 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-center font-bold text-white" value={data.hp} onChange={e => setData({...data, hp: e.target.value})} /></div>
+                        <div className="flex items-center justify-between"><span className="text-xs text-purple-400 font-bold">Stress</span><input className="w-16 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-center font-bold text-white" value={data.stress} onChange={e => setData({...data, stress: e.target.value})} /></div>
+                    </div>
+                </div>
+
+                <div>
+                    <div className="flex justify-between items-center mb-2"><label className="text-[10px] uppercase text-gray-500 font-bold">Moves & Features</label><button onClick={addFeature} className="text-[10px] bg-indigo-900 hover:bg-indigo-800 text-indigo-200 px-2 py-1 rounded flex items-center gap-1">+ Add Feature</button></div>
+                    <div className="space-y-2">
+                        {(data.features || []).map(f => (
+                            <div key={f.id} className="dh-feature-row relative group p-2 bg-gray-900/30 border border-indigo-900/30 rounded">
+                                <div className="flex gap-2 mb-2 items-center">
+                                    <input className="bg-transparent font-bold text-sm text-indigo-300 focus:outline-none flex-1" placeholder="Feature Name" value={f.name} onChange={e => updateFeature(f.id, 'name', e.target.value)} />
+                                    <select className="bg-gray-900 border border-indigo-900/50 text-[10px] text-gray-400 rounded px-1" value={f.type} onChange={e => updateFeature(f.id, 'type', e.target.value)}>
+                                        {FEATURE_TYPES.map(ft => <option key={ft} value={ft}>{ft}</option>)}
+                                    </select>
+                                    {f.type === 'Passive' && (
+                                        <input
+                                            className="w-16 bg-transparent text-xs text-center border-b border-indigo-900/50 focus:border-indigo-500 outline-none text-indigo-200"
+                                            placeholder="Value"
+                                            value={f.passiveValue || ''}
+                                            onChange={e => updateFeature(f.id, 'passiveValue', e.target.value)}
+                                        />
+                                    )}
+                                </div>
+                                <input className="w-full bg-transparent text-xs text-gray-500 italic mb-1 focus:outline-none border-b border-transparent focus:border-gray-700" placeholder="Flavor Text (Optional)..." value={f.flavorText || ''} onChange={e => updateFeature(f.id, 'flavorText', e.target.value)} />
+                                <textarea className="w-full bg-transparent text-xs text-gray-300 resize-none h-16 focus:outline-none mb-2" placeholder="Mechanics description..." value={f.description} onChange={e => updateFeature(f.id, 'description', e.target.value)} />
+                                <div className="flex gap-3 items-center bg-black/20 p-1 rounded">
+                                    <div className="flex items-center gap-1" title="Fear Cost"><Skull size={10} className="text-purple-400"/><input className="w-6 bg-transparent text-xs text-center border-b border-gray-700 focus:border-purple-500 outline-none text-purple-200" placeholder="-" value={f.fearCost || ''} onChange={e => updateFeature(f.id, 'fearCost', e.target.value)} /></div>
+                                    <div className="flex items-center gap-1" title="Stress Cost"><Activity size={10} className="text-gray-400"/><input className="w-6 bg-transparent text-xs text-center border-b border-gray-700 focus:border-white outline-none text-gray-200" placeholder="-" value={f.stressCost || ''} onChange={e => updateFeature(f.id, 'stressCost', e.target.value)} /></div>
+                                    <div className="flex items-center gap-1" title="HP Cost"><div className="text-[10px] text-red-400 font-bold">HP</div><input className="w-6 bg-transparent text-xs text-center border-b border-gray-700 focus:border-red-500 outline-none text-red-200" placeholder="-" value={f.hpCost || ''} onChange={e => updateFeature(f.id, 'hpCost', e.target.value)} /></div>
+                                    <div className="flex items-center gap-1 ml-auto"><span className="text-[9px] text-gray-500 uppercase">Uses</span><input className="w-16 bg-transparent text-xs text-right border-b border-gray-700 focus:border-yellow-500 outline-none text-yellow-200" placeholder="e.g. 1/Scene" value={f.maxUses || ''} onChange={e => updateFeature(f.id, 'maxUses', e.target.value)} /></div>
+                                </div>
+                                <button onClick={() => deleteFeature(f.id)} className="absolute top-1 right-1 text-gray-600 hover:text-red-500 opacity-0 group-hover:opacity-100"><Trash2 size={12}/></button>
+                            </div>
+                        ))}
+                        {(data.features || []).length === 0 && <div className="text-xs text-gray-600 italic text-center p-2">No features added.</div>}
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex justify-end gap-2 flex-shrink-0">
+                <button onClick={close} className="px-4 py-2 rounded border border-gray-600 text-gray-400 hover:text-white">Cancel</button>
+                <button onClick={handleSave} className="px-4 py-2 rounded bg-red-700 hover:bg-red-600 text-white font-bold flex items-center gap-2"><Save size={16}/> Save Adversary</button>
+            </div>
+        </div>
+    );
+};
+
+const BestiaryWindowContent = ({ library, setLibrary, openWindow }) => {
+    const [search, setSearch] = useState('');
+    const [typeFilter, setTypeFilter] = useState('All');
+    const [tierFilter, setTierFilter] = useState('All');
+    const [creatureFilter, setCreatureFilter] = useState('All');
+    const [biomeFilter, setBiomeFilter] = useState('All');
+    const [sortOrder, setSortOrder] = useState('none');
+
+    const filtered = library.filter(adv => {
+        const matchesSearch = adv.name.toLowerCase().includes(search.toLowerCase()) || adv.tags.toLowerCase().includes(search.toLowerCase());
+        const matchesType = typeFilter === 'All' || adv.type === typeFilter;
+        const matchesTier = tierFilter === 'All' || adv.tier === tierFilter;
+        const matchesCreature = creatureFilter === 'All' || adv.creatureType === creatureFilter;
+        const matchesBiome = biomeFilter === 'All' || adv.biome === biomeFilter;
+        return matchesSearch && matchesType && matchesTier && matchesCreature && matchesBiome;
+    }).sort((a, b) => {
+        if (sortOrder === 'none') return 0;
+        const diffA = parseInt(a.difficulty) || 0;
+        const diffB = parseInt(b.difficulty) || 0;
+        return sortOrder === 'asc' ? diffA - diffB : diffB - diffA;
+    });
+
+    const handleSaveAdversary = (savedAdv) => {
+        setLibrary(prev => {
+            const idx = prev.findIndex(a => a.id === savedAdv.id);
+            if (idx >= 0) {
+                const newLib = [...prev];
+                newLib[idx] = savedAdv;
+                return newLib;
+            } else {
+                return [...prev, savedAdv];
+            }
+        });
+    };
+
+    const toggleSort = () => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+
+    return (
+        <div className="h-full flex flex-col">
+            <div className="flex flex-col gap-2 mb-4 bg-gray-900/50 p-2 rounded border border-gray-800 flex-shrink-0">
+                <div className="relative w-full">
+                    <Search size={14} className="absolute top-2.5 left-2 text-gray-500"/>
+                    <input className="w-full bg-gray-800 border border-gray-700 rounded pl-8 py-1.5 text-sm text-white focus:border-indigo-500 outline-none" placeholder="Search adversaries..." value={search} onChange={e => setSearch(e.target.value)}/>
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                    <select className="bg-gray-800 border border-gray-700 rounded text-xs px-2 py-1 text-gray-300" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}><option value="All">All Types</option>{ADVERSARY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                    <select className="bg-gray-800 border border-gray-700 rounded text-xs px-2 py-1 text-gray-300" value={tierFilter} onChange={e => setTierFilter(e.target.value)}><option value="All">All Tiers</option>{[0,1,2,3,4].map(t => <option key={t} value={String(t)}>Tier {t}</option>)}</select>
+                    <select className="bg-gray-800 border border-gray-700 rounded text-xs px-2 py-1 text-gray-300" value={creatureFilter} onChange={e => setCreatureFilter(e.target.value)}><option value="All">All Creatures</option>{CREATURE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                    <select className="bg-gray-800 border border-gray-700 rounded text-xs px-2 py-1 text-gray-300" value={biomeFilter} onChange={e => setBiomeFilter(e.target.value)}><option value="All">All Biomes</option>{BIOMES.map(b => <option key={b} value={b}>{b}</option>)}</select>
+                    <button onClick={toggleSort} className="bg-gray-800 border border-gray-700 hover:bg-gray-700 text-gray-300 px-2 py-1 rounded flex items-center gap-1 text-xs" title="Sort Difficulty">{sortOrder === 'asc' ? <ArrowUp size={12}/> : <ArrowDown size={12}/>} Diff</button>
+                    <button onClick={() => openWindow('ADV_BUILDER', { onSave: handleSaveAdversary }, 'New Adversary')} className="bg-green-700 hover:bg-green-600 text-white px-3 py-1 rounded flex items-center gap-1 text-xs font-bold ml-auto"><Plus size={14}/> Create</button>
+                </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto min-h-0 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {filtered.map(adv => (
+                    <div key={adv.id} className="bg-gray-800 border border-gray-700 rounded p-3 hover:border-indigo-500 transition-colors cursor-pointer group relative">
+                        <div className="flex justify-between items-start mb-1">
+                            <div><h4 className="font-bold text-white text-sm">{adv.name}</h4><div className="flex gap-1 mt-1"><span className="text-[9px] text-gray-400 bg-gray-900 px-1 py-0.5 rounded border border-gray-700">{adv.type}</span><span className="text-[9px] text-gray-400 bg-gray-900 px-1 py-0.5 rounded border border-gray-700">Tier {adv.tier}</span></div></div>
+                            <div className="text-right"><div className="text-[9px] text-gray-500 uppercase font-bold">Diff</div><div className="text-sm font-bold text-indigo-400">{adv.difficulty}</div></div>
+                        </div>
+                        <div className="flex flex-wrap gap-1 mb-2">
+                            {adv.creatureType && <span className="text-[9px] text-blue-300 bg-blue-900/30 px-1 rounded">{adv.creatureType}</span>}
+                            {adv.biome && <span className="text-[9px] text-green-300 bg-green-900/30 px-1 rounded">{adv.biome}</span>}
+                        </div>
+                        <p className="text-xs text-gray-500 italic truncate mb-2">{adv.tags}</p>
+                        <div className="flex flex-col gap-1 mb-2">
+                            {(adv.attacks || []).slice(0, 2).map(atk => (<div key={atk.id} className="flex justify-between text-xs text-gray-300 bg-gray-900/50 p-1 rounded"><span className="font-bold truncate w-20">{atk.name}</span><span className="text-red-400">{atk.mod}</span><span className="text-gray-400">{atk.damage}</span></div>))}
+                            {(adv.attacks || []).length > 2 && <span className="text-[9px] text-gray-500">+{adv.attacks.length - 2} more...</span>}
+                        </div>
+                        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={(e) => { e.stopPropagation(); openWindow('ADV_BUILDER', { onSave: handleSaveAdversary, initialData: adv }, `Edit ${adv.name}`); }} className="text-gray-400 hover:text-white hover:bg-gray-700 p-1 rounded"><Pencil size={12}/></button>
+                            <button onClick={(e) => { e.stopPropagation(); if(window.confirm("Delete this adversary?")) setLibrary(library.filter(l => l.id !== adv.id)); }} className="text-red-500 hover:bg-red-900/20 p-1 rounded"><Trash2 size={12}/></button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 const HexDetailWindowContent = ({ hexes, hexIndex, updateHex, tables, openWindow }) => {
     const hex = hexes[hexIndex];
     const [activeTab, setActiveTab] = useState('details');
+    const [generatedFeatures, setGeneratedFeatures] = useState(hex.generatedFeatures || []);
 
     if (!hex) return <div>Hex Not Found</div>;
+
+    const addGeneratedFeature = (feat) => {
+        const newFeats = [...generatedFeatures, feat];
+        setGeneratedFeatures(newFeats);
+        updateHex(hexIndex, 'generatedFeatures', newFeats);
+    };
+
+    const deleteGeneratedFeature = (index) => {
+        if(window.confirm("Delete this generated feature?")) {
+            const newFeats = generatedFeatures.filter((_, idx) => idx !== index);
+            setGeneratedFeatures(newFeats);
+            updateHex(hexIndex, 'generatedFeatures', newFeats);
+        }
+    };
+
+    const rollTable = (category, tagFilter) => {
+        const list = (tables[category] || []);
+        let candidates = list;
+        if (tagFilter) {
+            const filtered = list.filter(i => i.tags && i.tags.toLowerCase().includes(tagFilter.toLowerCase()));
+            if (filtered.length > 0) candidates = filtered;
+        }
+        if (candidates.length === 0) return "Nothing happens.";
+        const item = candidates[Math.floor(Math.random() * candidates.length)];
+        return item.text;
+    };
+
+    const generateFeature = (type) => {
+        let result = "";
+        const r = Math.floor(Math.random() * 10) + 1;
+        if (type === 'natural') { const opts = ["Crystal Cave", "Hot Springs", "Quicksand Pit", "Giant Boulder", "Ancient Tree", "Hidden Waterfall"]; result = opts[r % opts.length]; }
+        else if (type === 'manmade') { const opts = ["Ruined Watchtower", "Abandoned Cottage", "Shrine to a Forgotten God", "Merchant Caravan", "Bandit Camp"]; result = opts[r % opts.length]; }
+        else { const opts = ["Ley Line Nexus", "Fairy Ring", "Floating Rock", "Glowing Crystals", "Time Distortion Field"]; result = opts[r % opts.length]; }
+        addGeneratedFeature({ id: Date.now(), text: result, type });
+    };
+
+    const rollNavigation = () => {
+        const d12 = Math.floor(Math.random() * 12) + 1;
+        let result = "";
+        if (hex.terrain === 'plains') { if (d12 <= 6) result = d12 % 2 === 0 ? "Veer Left 60°" : "Veer Right 60°"; else result = "On Course"; }
+        else if (hex.terrain === 'forest' || hex.terrain === 'mountain') { if (d12 <= 6) result = d12 <= 3 ? "Veer 60°" : "Veer 120°"; else result = "On Course"; }
+        else { if (d12 <= 6) result = d12 === 1 ? "180° Turnaround (Lost)" : "Veer Randomly"; else result = "On Course"; }
+        alert(`Navigation Roll (d12: ${d12}): ${result}`);
+    };
+
+    const rollForage = () => {
+        let die = 6;
+        if (hex.terrain === 'forest' || hex.terrain === 'mountain') die = 8;
+        if (hex.terrain === 'swamp' || hex.terrain === 'desert') die = 10;
+        const roll = Math.floor(Math.random() * die) + 1;
+        alert(`Foraging Roll (d${die}): ${roll}. (Compare to Target Number)`);
+    };
+
+    const rollEncounter = () => {
+        const encounter = rollTable('encounters', hex.terrain);
+        alert(`Encounter Roll: ${encounter}`);
+    };
+
+    const handleCreateNPC = () => {
+        openWindow('NPC_BUILDER', {
+            onSave: (data) => {
+                updateHex(hexIndex, 'npcs', [...(hex.npcs || []), data]);
+            },
+            initialData: { location: hex.title || `Hex ${hex.q},${hex.r}` }
+        }, "New Hex NPC");
+    };
+
+    const handleImportNPC = () => {
+        openWindow('NPC_PICKER', {
+            onPick: (npc) => {
+                updateHex(hexIndex, 'npcs', [...(hex.npcs || []), { ...npc, id: Date.now() }]);
+            }
+        }, "Import NPC to Hex");
+    };
+
+    const handleEditNPC = (npc) => {
+        openWindow('NPC_BUILDER', {
+            initialData: npc,
+            onSave: (updatedData) => {
+                const currentNpcs = hex.npcs || [];
+                const updatedList = currentNpcs.map(n => n.id === npc.id ? updatedData : n);
+                updateHex(hexIndex, 'npcs', updatedList);
+            }
+        }, `Edit ${npc.name}`);
+    };
+
+    const handleDeleteNPC = (npcId, e) => {
+        e.stopPropagation();
+        if(confirm("Remove this NPC from the hex?")) {
+            const currentNpcs = hex.npcs || [];
+            updateHex(hexIndex, 'npcs', currentNpcs.filter(n => n.id !== npcId));
+        }
+    };
 
     return (
         <div className="h-full flex flex-col">
             <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-700">
                 <h2 className="text-xl font-bold text-green-400">Hex {hex.q}, {hex.r}</h2>
-                <select className="bg-gray-800 border border-gray-700 rounded p-1 text-xs text-white" value={hex.status} onChange={(e) => updateHex(hexIndex, 'status', e.target.value)}>
-                    <option value="unexplored">Unexplored</option>
-                    <option value="explored">Explored</option>
-                    <option value="unsearched">Unsearched</option>
-                </select>
+                <select className="bg-gray-800 border border-gray-700 rounded p-1 text-xs text-white" value={hex.status} onChange={(e) => updateHex(hexIndex, 'status', e.target.value)}><option value="unexplored">Unexplored</option><option value="explored">Explored</option><option value="unsearched">Unsearched</option></select>
             </div>
             <div className="flex gap-2 mb-4">
-                {['details', 'encounters', 'npcs'].map(t => (
-                    <button key={t} onClick={() => setActiveTab(t)} className={`flex-1 py-1 text-xs font-bold uppercase rounded ${activeTab === t ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}>
-                        {t === 'details' ? 'Overview' : t === 'encounters' ? 'Encounters' : 'NPCs'}
-                    </button>
-                ))}
+                {['details', 'explore', 'gen', 'npcs'].map(t => ( <button key={t} onClick={() => setActiveTab(t)} className={`flex-1 py-1 text-xs font-bold uppercase rounded ${activeTab === t ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}>{t === 'details' ? 'Properties' : t === 'explore' ? 'Operations' : t === 'gen' ? 'Features' : 'NPCs'}</button> ))}
             </div>
             {activeTab === 'details' && (
                 <div className="flex-1 flex flex-col gap-4 overflow-y-auto">
-                    <div className="space-y-1">
-                        <label className="text-xs uppercase font-bold text-gray-500">Region Name</label>
-                        <input className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-white focus:border-green-500 outline-none" value={hex.title} onChange={(e) => updateHex(hexIndex, 'title', e.target.value)} placeholder="Region Name..." />
-                    </div>
+                    <div className="space-y-1"><label className="text-xs uppercase font-bold text-gray-500">Title</label><input className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-white focus:border-green-500 outline-none" value={hex.title} onChange={(e) => updateHex(hexIndex, 'title', e.target.value)} placeholder="Region Name..." /></div>
                     <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                            <label className="text-xs uppercase font-bold text-gray-500">Terrain</label>
-                            <select className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-white focus:border-green-500 outline-none" value={hex.terrain} onChange={(e) => updateHex(hexIndex, 'terrain', e.target.value)}>
-                                <option value="plains">Plains</option>
-                                <option value="forest">Forest</option>
-                                <option value="mountain">Mountain</option>
-                                <option value="water">Water</option>
-                                <option value="swamp">Swamp</option>
-                                <option value="desert">Desert</option>
-                            </select>
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-xs uppercase font-bold text-gray-500">Icon</label>
-                            <select className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-white focus:border-green-500 outline-none" value={hex.icon} onChange={(e) => updateHex(hexIndex, 'icon', e.target.value)}>
-                                <option value="none">None</option>
-                                <option value="town">Town</option>
-                                <option value="dungeon">Dungeon</option>
-                                <option value="ruins">Ruins</option>
-                            </select>
-                        </div>
+                        <div className="space-y-1"><label className="text-xs uppercase font-bold text-gray-500">Terrain</label><select className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-white focus:border-green-500 outline-none" value={hex.terrain} onChange={(e) => updateHex(hexIndex, 'terrain', e.target.value)}><option value="plains">Plains</option><option value="forest">Forest</option><option value="mountain">Mountain</option><option value="water">Water</option><option value="swamp">Swamp</option><option value="desert">Desert</option></select></div>
+                        <div className="space-y-1"><label className="text-xs uppercase font-bold text-gray-500">Icon</label><select className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-white focus:border-green-500 outline-none" value={hex.icon} onChange={(e) => updateHex(hexIndex, 'icon', e.target.value)}><option value="none">None</option><option value="town">Town</option><option value="dungeon">Dungeon</option><option value="ruins">Ruins</option></select></div>
                     </div>
-                    <div className="space-y-1 flex-1">
-                        <label className="text-xs uppercase font-bold text-gray-500">Notes</label>
-                        <textarea className="w-full h-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-gray-300 resize-none focus:outline-none focus:border-green-500" value={hex.notes} onChange={(e) => updateHex(hexIndex, 'notes', e.target.value)} placeholder="Hex notes..." />
-                    </div>
+                    <div className="space-y-1 flex-1"><label className="text-xs uppercase font-bold text-gray-500">Notes</label><textarea className="w-full h-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-gray-300 resize-none focus:outline-none focus:border-green-500" value={hex.notes} onChange={(e) => updateHex(hexIndex, 'notes', e.target.value)} placeholder="Hex notes..." /></div>
                 </div>
             )}
-            {activeTab === 'encounters' && (
+            {activeTab === 'explore' && (
                 <div className="flex-1 flex flex-col gap-4 overflow-y-auto">
-                    <div className="text-center text-gray-500 italic text-sm py-8">
-                        Encounter tables coming soon...
+                    <div className="bg-gray-900/50 p-3 rounded border border-gray-700"><h4 className="text-xs font-bold text-indigo-400 uppercase mb-2 flex items-center gap-2"><Compass size={12}/> Navigation</h4><button onClick={rollNavigation} className="w-full bg-indigo-900/50 hover:bg-indigo-800 border border-indigo-700 text-indigo-200 py-2 rounded text-sm font-bold mb-2">Check Navigation (d12)</button><p className="text-[10px] text-gray-500">Based on terrain difficulty ({hex.terrain}).</p></div>
+                    <div className="bg-gray-900/50 p-3 rounded border border-gray-700"><h4 className="text-xs font-bold text-green-400 uppercase mb-2 flex items-center gap-2"><Apple size={12}/> Survival</h4><button onClick={rollForage} className="w-full bg-green-900/50 hover:bg-green-800 border border-green-700 text-green-200 py-2 rounded text-sm font-bold mb-2">Forage / Hunt</button><p className="text-[10px] text-gray-500">Spend Movement Points. Double cost = Double chance.</p></div>
+                    <div className="bg-gray-900/50 p-3 rounded border border-gray-700"><h4 className="text-xs font-bold text-red-400 uppercase mb-2 flex items-center gap-2"><Sword size={12}/> Encounters</h4><button onClick={rollEncounter} className="w-full bg-red-900/50 hover:bg-red-800 border border-red-700 text-red-200 py-2 rounded text-sm font-bold mb-2">Roll Random Encounter</button><p className="text-[10px] text-gray-500">Checks 'Encounters' table for tag: "{hex.terrain}".</p></div>
+                </div>
+            )}
+            {activeTab === 'gen' && (
+                <div className="flex-1 flex flex-col gap-3 overflow-y-auto">
+                    <div className="grid grid-cols-3 gap-2">
+                        <button onClick={() => generateFeature('natural')} className="bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded py-2 text-[10px] font-bold text-green-300">Natural</button>
+                        <button onClick={() => generateFeature('manmade')} className="bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded py-2 text-[10px] font-bold text-gray-300">Man-Made</button>
+                        <button onClick={() => generateFeature('wondrous')} className="bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded py-2 text-[10px] font-bold text-purple-300">Wondrous</button>
+                    </div>
+                    <div className="flex-1 bg-black/20 rounded p-2 overflow-y-auto space-y-2 border border-gray-800">
+                        {generatedFeatures.map((feat, i) => ( <div key={i} className="bg-gray-900 p-2 rounded text-xs border border-gray-700 flex justify-between items-center"><span className={feat.type === 'natural' ? 'text-green-400' : feat.type === 'wondrous' ? 'text-purple-400' : 'text-gray-300'}>{feat.text}</span><button onClick={() => deleteGeneratedFeature(i)} className="text-gray-600 hover:text-red-500"><Trash2 size={12}/></button></div> ))}
+                        {generatedFeatures.length === 0 && <div className="text-center text-gray-600 text-xs italic mt-4">No features generated.</div>}
                     </div>
                 </div>
             )}
             {activeTab === 'npcs' && (
                 <div className="flex-1 flex flex-col gap-4 overflow-y-auto">
+                    <div className="flex gap-2">
+                        <button onClick={handleImportNPC} className="flex-1 bg-indigo-900/50 hover:bg-indigo-800 border border-indigo-700 text-indigo-200 py-2 rounded text-xs font-bold flex items-center justify-center gap-2"><User size={12}/> Import</button>
+                        <button onClick={handleCreateNPC} className="flex-1 bg-green-900/50 hover:bg-green-800 border border-green-700 text-green-200 py-2 rounded text-xs font-bold flex items-center justify-center gap-2"><Plus size={12}/> Create New</button>
+                    </div>
                     <div className="space-y-2">
                         {(hex.npcs || []).map(npc => (
-                            <div key={npc.id} className="bg-gray-800 hover:bg-gray-700 border border-gray-700 p-2 rounded cursor-pointer group transition-colors">
+                            <div key={npc.id} onClick={() => handleEditNPC(npc)} className="bg-gray-800 hover:bg-gray-700 border border-gray-700 p-2 rounded cursor-pointer group transition-colors">
                                 <div className="flex justify-between items-start">
                                     <div className="flex items-center gap-2">
-                                        <div className="w-6 h-6 rounded-full bg-gray-600 flex items-center justify-center text-gray-300 font-bold text-xs">{npc.name.charAt(0)}</div>
+                                        <div className="w-6 h-6 rounded-full bg-gray-600 flex items-center justify-center text-gray-300 font-bold text-xs group-hover:bg-green-600 group-hover:text-white">{npc.name.charAt(0)}</div>
                                         <div>
                                             <div className="font-bold text-sm text-gray-200">{npc.name}</div>
                                             <div className="text-[10px] text-gray-500">{npc.race} • {npc.role}</div>
                                         </div>
                                     </div>
+                                    <button onClick={(e) => handleDeleteNPC(npc.id, e)} className="text-gray-600 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={12}/></button>
                                 </div>
                             </div>
                         ))}
@@ -1087,7 +2801,7 @@ export default function App() {
             const r_offset = Math.floor(i / 8);
             const q = c;
             const r = r_offset - Math.floor((c - (c&1)) / 2);
-            return { q, r, status: 'unexplored', title: '', icon: 'none', terrain: 'plains', notes: '' };
+            return { q, r, status: 'unexplored', title: '', icon: 'none', terrain: 'plains', notes: '', encounters: [], npcs: [] };
         });
     });
 
@@ -1151,8 +2865,46 @@ export default function App() {
     useEffect(() => { safeSetItem('ollia_encounters', JSON.stringify(savedEncounters)); }, [savedEncounters]);
     useEffect(() => { safeSetItem('ollia_fear', JSON.stringify(fear)); }, [fear]);
     useEffect(() => { safeSetItem('ollia_hex_settings', JSON.stringify(hexSettings)); }, [hexSettings]);
+    useEffect(() => { safeSetItem('ollia_tables', JSON.stringify(tables)); }, [tables]);
+    useEffect(() => { safeSetItem('ollia_custom_tables', JSON.stringify(customTables)); }, [customTables]);
 
+    useEffect(() => {
+        setTables(prev => {
+            const existingEncounters = prev.encounters || [];
+            const manualEntries = existingEncounters.filter(e => !String(e.id).startsWith('linked_'));
+
+            const linkedEntries = savedEncounters.map(enc => ({
+                id: `linked_${enc.id}`,
+                text: enc.name,
+                tags: `saved, encounter, tier ${enc.enemies?.[0]?.tier || '?'}`,
+                tone: 'negative',
+                rarity: 'common',
+                isLinked: true
+            }));
+
+            return {
+                ...prev,
+                encounters: [...manualEntries, ...linkedEntries]
+            };
+        });
+    }, [savedEncounters]);
+
+    const updateNode = (id, updates) => setNodes(prev => {
+        const updateRec = (list) => list.map(n => n.id === id ? { ...n, ...updates } : { ...n, children: updateRec(n.children) });
+        return updateRec(prev);
+    });
     const updateHex = (idx, f, v) => setHexes(prev => { const n = [...prev]; n[idx] = { ...n[idx], [f]: v }; return n; });
+    const upsertNpc = (savedNpc) => {
+        setNpcCatalog(prev => {
+            const idx = prev.findIndex(n => n.id === savedNpc.id);
+            if (idx >= 0) {
+                const next = [...prev];
+                next[idx] = savedNpc;
+                return next;
+            }
+            return [...prev, savedNpc];
+        });
+    };
 
     const updateGridDimensions = (newRows, newCols) => {
         setHexSettings(prev => ({ ...prev, rows: newRows, cols: newCols }));
@@ -1166,12 +2918,74 @@ export default function App() {
                     if (existing) {
                         newHexes.push(existing);
                     } else {
-                        newHexes.push({ q, r, status: 'unexplored', title: '', icon: 'none', terrain: 'plains', notes: '' });
+                        newHexes.push({ q, r, status: 'unexplored', title: '', icon: 'none', terrain: 'plains', notes: '', encounters: [], npcs: [] });
                     }
                 }
             }
             return newHexes;
         });
+    };
+
+    const findNode = (id, list = nodes) => {
+        for (let n of list) {
+            if (n.id === id) return n;
+            if (n.children.length) {
+                const f = findNode(id, n.children);
+                if (f) return f;
+            }
+        }
+        return null;
+    };
+
+    const handleQuickCombat = (item) => {
+        const entryText = typeof item === 'string' ? item : item.text;
+
+        const newNodeId = Date.now();
+        const newNode = {
+            id: newNodeId,
+            type: 'quick_encounter',
+            title: `Encounter: ${entryText.substring(0, 30)}...`,
+            desc: `Generated from table result: "${entryText}"`,
+            enemies: [],
+            skillChecks: [],
+            npcs: [],
+            children: []
+        };
+
+        let enemiesToLoad = [];
+
+        if (typeof item === 'object' && item.isLinked && typeof item.id === 'string' && item.id.startsWith('linked_')) {
+            const originalId = parseInt(item.id.replace('linked_', ''));
+            const encounter = savedEncounters.find(e => e.id === originalId);
+
+            if (encounter && encounter.enemies) {
+                 enemiesToLoad = encounter.enemies.map(e => ({
+                    ...e,
+                    id: Date.now() + Math.random(),
+                    instances: (e.instances || []).map(inst => ({ ...inst, id: Date.now() + Math.random() }))
+                }));
+            }
+        }
+
+        if (enemiesToLoad.length === 0) {
+            const matchedAdversaries = bestiary.filter(adv =>
+                entryText.toLowerCase().includes(adv.name.toLowerCase()) ||
+                (adv.tags && adv.tags.split(',').some(tag => tag.trim() && entryText.toLowerCase().includes(tag.trim().toLowerCase()) && tag.trim().length > 3))
+            );
+
+            if (matchedAdversaries.length > 0) {
+                enemiesToLoad = matchedAdversaries.map(adv => ({
+                    ...adv,
+                    id: Date.now() + Math.random(),
+                    instances: Array.from({length: 1}).map((_, i) => ({ id: Date.now() + i, hp: 0, stress: 0 }))
+                }));
+            }
+        }
+
+        newNode.enemies = enemiesToLoad;
+
+        setNodes(prev => [...prev, newNode]);
+        openWindow('COMBAT', { nodeId: newNodeId }, `Combat: ${newNode.title}`);
     };
 
     const openWindow = (type, data, title) => {
@@ -1235,7 +3049,7 @@ export default function App() {
             case 'FEAR': return <Skull size={16}/>;
             case 'COMBAT': return <Sword size={16}/>;
             case 'NPC': return <User size={16}/>;
-            case 'NPC_MANAGER': case 'NPC_BUILDER': return <User size={16}/>;
+            case 'NPC_MANAGER': case 'NPC_BUILDER': case 'NPC_PICKER': return <User size={16}/>;
             case 'BESTIARY': case 'ADV_BUILDER': case 'BESTIARY_PICKER': return <Skull size={16}/>;
             case 'ENCOUNTER_MANAGER': return <Target size={16}/>;
             case 'TABLE_MANAGER': return <List size={16}/>;
@@ -1273,6 +3087,18 @@ export default function App() {
             case 'DICE': return <DiceWidget />;
             case 'FEAR': return <FearWidget fear={fear} setFear={setFear} />;
             case 'HEX_DETAIL': return <HexDetailWindowContent hexes={hexes} hexIndex={data.hexIndex} updateHex={updateHex} tables={tables} openWindow={openWindow} />;
+            case 'SCENE': return <SceneWindowContent node={findNode(data.nodeId)} updateNode={updateNode} openWindow={openWindow} savedEncounters={savedEncounters} tables={tables} customTables={customTables} npcCatalog={npcCatalog} />;
+            case 'ENCOUNTER_MANAGER': return <EncounterManagerWindowContent encounters={savedEncounters} setEncounters={setSavedEncounters} openWindow={openWindow} />;
+            case 'BESTIARY': return <BestiaryWindowContent library={bestiary} setLibrary={setBestiary} openWindow={openWindow} />;
+            case 'ADV_BUILDER': return <AdversaryBuilderWindow onSave={data.onSave} initialData={data.initialData} close={() => closeWindow(data.windowId)} />;
+            case 'BESTIARY_PICKER': return <BestiaryPickerWindowContent library={bestiary} onPick={data.onPick} close={() => closeWindow(data.windowId)} />;
+            case 'COMBAT': return <CombatWindowContent node={findNode(data.nodeId)} updateNode={updateNode} openWindow={openWindow} library={bestiary} party={party} savedEncounters={savedEncounters} />;
+            case 'NPC_MANAGER': return <NpcManagerWindowContent npcCatalog={npcCatalog} setNpcCatalog={setNpcCatalog} npcTraits={npcTraits} setNpcTraits={setNpcTraits} openWindow={openWindow} />;
+            case 'NPC_BUILDER': return <NpcBuilderWindowContent onSave={data.onSave || upsertNpc} initialData={data.initialData} npcTraits={npcTraits} close={() => closeWindow(data.windowId)} />;
+            case 'NPC_PICKER': return <NpcPickerWindowContent npcCatalog={npcCatalog} onPick={data.onPick} onSaveNpc={upsertNpc} close={() => closeWindow(data.windowId)} openWindow={openWindow} />;
+            case 'TABLE_MANAGER': return <TableManagerWindowContent tables={tables} setTables={setTables} customTables={customTables} setCustomTables={setCustomTables} close={() => closeWindow(data.windowId)} openWindow={openWindow} onQuickCombat={handleQuickCombat} />;
+            case 'TABLE_ROLLER': return <TableRollerWindowContent table={data.table} />;
+            case 'TABLE_PICKER': return <TablePickerWindowContent tables={tables} customTables={customTables} onPick={data.onPick} close={() => closeWindow(data.windowId)} />;
             default: return <div className="p-4 text-gray-500">Widget: {type}</div>;
         }
     };
