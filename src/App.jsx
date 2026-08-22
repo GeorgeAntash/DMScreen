@@ -1546,6 +1546,720 @@ const HexDetailWindowContent = ({ hexes, hexIndex, updateHex, tables, openWindow
     );
 };
 
+const TableManagerWindowContent = ({ tables, setTables, customTables, setCustomTables }) => {
+    const [activeCategory, setActiveCategory] = useState('weather');
+    const [view, setView] = useState('list');
+    const [editItem, setEditItem] = useState(null);
+    const [newItem, setNewItem] = useState({ text: '', tags: '', rarity: 'common', tone: 'neutral' });
+    const [newTableName, setNewTableName] = useState('');
+
+    const allCategories = [
+        ...TABLE_CATEGORIES,
+        ...customTables.map(t => ({ id: t.id, label: t.name, icon: List, custom: true }))
+    ];
+
+    const currentItems = customTables.find(t => t.id === activeCategory)?.items || tables[activeCategory] || [];
+
+    const addItem = () => {
+        if (!newItem.text.trim()) return;
+        const item = { id: Date.now(), ...newItem };
+        const customTable = customTables.find(t => t.id === activeCategory);
+        if (customTable) {
+            setCustomTables(prev => prev.map(t => t.id === activeCategory ? { ...t, items: [...t.items, item] } : t));
+        } else {
+            setTables(prev => ({ ...prev, [activeCategory]: [...(prev[activeCategory] || []), item] }));
+        }
+        setNewItem({ text: '', tags: '', rarity: 'common', tone: 'neutral' });
+    };
+
+    const deleteItem = (itemId) => {
+        const customTable = customTables.find(t => t.id === activeCategory);
+        if (customTable) {
+            setCustomTables(prev => prev.map(t => t.id === activeCategory ? { ...t, items: t.items.filter(i => i.id !== itemId) } : t));
+        } else {
+            setTables(prev => ({ ...prev, [activeCategory]: prev[activeCategory].filter(i => i.id !== itemId) }));
+        }
+    };
+
+    const updateItem = (itemId, updates) => {
+        const customTable = customTables.find(t => t.id === activeCategory);
+        if (customTable) {
+            setCustomTables(prev => prev.map(t => t.id === activeCategory ? { ...t, items: t.items.map(i => i.id === itemId ? { ...i, ...updates } : i) } : t));
+        } else {
+            setTables(prev => ({ ...prev, [activeCategory]: prev[activeCategory].map(i => i.id === itemId ? { ...i, ...updates } : i) }));
+        }
+        setEditItem(null);
+    };
+
+    const createTable = () => {
+        if (!newTableName.trim()) return;
+        const newTable = { id: `custom_${Date.now()}`, name: newTableName.trim(), items: [] };
+        setCustomTables(prev => [...prev, newTable]);
+        setActiveCategory(newTable.id);
+        setNewTableName('');
+    };
+
+    const deleteTable = (tableId) => {
+        if (!window.confirm("Delete this custom table?")) return;
+        setCustomTables(prev => prev.filter(t => t.id !== tableId));
+        setActiveCategory('weather');
+    };
+
+    const rollOnTable = () => {
+        if (currentItems.length === 0) return null;
+        const weights = { common: 60, unlikely: 25, rare: 12, wondrous: 3 };
+        const weighted = currentItems.flatMap(item => Array(weights[item.rarity] || 10).fill(item));
+        return weighted[Math.floor(Math.random() * weighted.length)];
+    };
+
+    const [lastRoll, setLastRoll] = useState(null);
+
+    return (
+        <div className="h-full flex gap-4">
+            <div className="w-48 flex flex-col gap-2 border-r border-gray-800 pr-4">
+                <div className="text-xs uppercase text-gray-500 font-bold mb-2">Categories</div>
+                {allCategories.map(cat => {
+                    const Icon = cat.icon;
+                    return (
+                        <div key={cat.id} className="flex items-center gap-1">
+                            <button
+                                onClick={() => setActiveCategory(cat.id)}
+                                className={`flex-1 flex items-center gap-2 px-2 py-1.5 rounded text-sm ${activeCategory === cat.id ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
+                            >
+                                <Icon size={14}/> {cat.label}
+                            </button>
+                            {cat.custom && (
+                                <button onClick={() => deleteTable(cat.id)} className="text-gray-600 hover:text-red-400 p-1"><Trash2 size={12}/></button>
+                            )}
+                        </div>
+                    );
+                })}
+                <div className="mt-4 pt-4 border-t border-gray-800">
+                    <input className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-xs text-white mb-2" placeholder="New table name..." value={newTableName} onChange={e => setNewTableName(e.target.value)}/>
+                    <button onClick={createTable} className="w-full bg-green-700 hover:bg-green-600 text-white text-xs py-1 rounded flex items-center justify-center gap-1"><Plus size={12}/> Create Table</button>
+                </div>
+            </div>
+
+            <div className="flex-1 flex flex-col min-w-0">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-bold capitalize">{allCategories.find(c => c.id === activeCategory)?.label || activeCategory}</h3>
+                    <div className="flex gap-2">
+                        <button onClick={() => { const r = rollOnTable(); if(r) setLastRoll(r); }} className="bg-purple-700 hover:bg-purple-600 text-white px-3 py-1 rounded text-xs flex items-center gap-1"><Dices size={14}/> Roll</button>
+                        <button onClick={() => setView(view === 'list' ? 'editor' : 'list')} className={`px-3 py-1 rounded text-xs ${view === 'editor' ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400'}`}>{view === 'list' ? 'Editor' : 'List'}</button>
+                    </div>
+                </div>
+
+                {lastRoll && (
+                    <div className="bg-purple-900/30 border border-purple-700 rounded p-3 mb-4">
+                        <div className="text-xs text-purple-400 uppercase font-bold mb-1">Rolled Result</div>
+                        <div className="text-white font-bold">{lastRoll.text}</div>
+                        <div className="flex gap-2 mt-1">
+                            <span className={`text-[10px] px-1 rounded ${lastRoll.rarity === 'common' ? 'bg-gray-700' : lastRoll.rarity === 'unlikely' ? 'bg-green-900 text-green-300' : lastRoll.rarity === 'rare' ? 'bg-blue-900 text-blue-300' : 'bg-purple-900 text-purple-300'}`}>{lastRoll.rarity}</span>
+                            {lastRoll.tags && <span className="text-[10px] text-gray-500">{lastRoll.tags}</span>}
+                        </div>
+                    </div>
+                )}
+
+                {view === 'editor' && (
+                    <div className="bg-gray-900/60 border border-gray-700 rounded p-3 mb-4">
+                        <div className="text-xs uppercase text-gray-500 font-bold mb-2">Add Entry</div>
+                        <div className="grid grid-cols-1 gap-2">
+                            <textarea className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white resize-none h-16" placeholder="Entry text..." value={newItem.text} onChange={e => setNewItem({...newItem, text: e.target.value})}/>
+                            <div className="flex gap-2">
+                                <input className="flex-1 bg-gray-800 border border-gray-700 rounded p-2 text-xs text-white" placeholder="Tags (comma separated)" value={newItem.tags} onChange={e => setNewItem({...newItem, tags: e.target.value})}/>
+                                <select className="bg-gray-800 border border-gray-700 rounded p-2 text-xs text-white" value={newItem.rarity} onChange={e => setNewItem({...newItem, rarity: e.target.value})}>
+                                    <option value="common">Common</option>
+                                    <option value="unlikely">Unlikely</option>
+                                    <option value="rare">Rare</option>
+                                    <option value="wondrous">Wondrous</option>
+                                </select>
+                                <select className="bg-gray-800 border border-gray-700 rounded p-2 text-xs text-white" value={newItem.tone} onChange={e => setNewItem({...newItem, tone: e.target.value})}>
+                                    <option value="positive">Positive</option>
+                                    <option value="neutral">Neutral</option>
+                                    <option value="negative">Negative</option>
+                                </select>
+                            </div>
+                            <button onClick={addItem} className="bg-green-700 hover:bg-green-600 text-white text-xs py-2 rounded">Add Entry</button>
+                        </div>
+                    </div>
+                )}
+
+                <div className="flex-1 overflow-y-auto space-y-2">
+                    {currentItems.map(item => (
+                        <div key={item.id} className="bg-gray-800 border border-gray-700 rounded p-2 group hover:border-gray-600">
+                            {editItem === item.id ? (
+                                <div className="space-y-2">
+                                    <textarea className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white resize-none" defaultValue={item.text} id={`edit-${item.id}`}/>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => updateItem(item.id, { text: document.getElementById(`edit-${item.id}`).value })} className="bg-green-700 text-white text-xs px-2 py-1 rounded">Save</button>
+                                        <button onClick={() => setEditItem(null)} className="text-gray-400 text-xs">Cancel</button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="flex justify-between items-start">
+                                    <div className="flex-1">
+                                        <div className="text-sm text-white">{item.text}</div>
+                                        <div className="flex gap-2 mt-1">
+                                            <span className={`text-[10px] px-1 rounded ${item.rarity === 'common' ? 'bg-gray-700' : item.rarity === 'unlikely' ? 'bg-green-900 text-green-300' : item.rarity === 'rare' ? 'bg-blue-900 text-blue-300' : 'bg-purple-900 text-purple-300'}`}>{item.rarity}</span>
+                                            <span className={`text-[10px] px-1 rounded ${item.tone === 'positive' ? 'bg-green-900/50 text-green-400' : item.tone === 'negative' ? 'bg-red-900/50 text-red-400' : 'bg-gray-700 text-gray-400'}`}>{item.tone}</span>
+                                            {item.tags && <span className="text-[10px] text-gray-500">{item.tags}</span>}
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                                        <button onClick={() => setEditItem(item.id)} className="text-gray-400 hover:text-white p-1"><Pencil size={12}/></button>
+                                        <button onClick={() => deleteItem(item.id)} className="text-gray-400 hover:text-red-400 p-1"><Trash2 size={12}/></button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                    {currentItems.length === 0 && <div className="text-center text-gray-600 text-sm italic mt-8">No entries in this table yet.</div>}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const NPCManagerWindowContent = ({ npcCatalog, setNpcCatalog, npcTraits, setNpcTraits, openWindow }) => {
+    const [view, setView] = useState('catalog');
+    const [search, setSearch] = useState('');
+    const [newTrait, setNewTrait] = useState({ text: '', category: 'Appearance', tags: '' });
+    const [filterCategory, setFilterCategory] = useState('All');
+
+    const filteredNpcs = npcCatalog.filter(npc =>
+        npc.name.toLowerCase().includes(search.toLowerCase()) ||
+        (npc.role || '').toLowerCase().includes(search.toLowerCase())
+    );
+
+    const filteredTraits = npcTraits.filter(t =>
+        (filterCategory === 'All' || t.category === filterCategory) &&
+        (t.text.toLowerCase().includes(search.toLowerCase()) || (t.tags || '').toLowerCase().includes(search.toLowerCase()))
+    );
+
+    const addTrait = () => {
+        if (!newTrait.text.trim()) return;
+        setNpcTraits(prev => [...prev, { id: Date.now(), ...newTrait }]);
+        setNewTrait({ text: '', category: 'Appearance', tags: '' });
+    };
+
+    const deleteTrait = (id) => {
+        setNpcTraits(prev => prev.filter(t => t.id !== id));
+    };
+
+    const deleteNpc = (id) => {
+        if (window.confirm("Delete this NPC?")) {
+            setNpcCatalog(prev => prev.filter(n => n.id !== id));
+        }
+    };
+
+    return (
+        <div className="h-full flex flex-col">
+            <div className="flex gap-2 mb-4">
+                <button onClick={() => setView('catalog')} className={`flex-1 py-2 text-xs font-bold uppercase rounded ${view === 'catalog' ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400'}`}>NPC Catalog</button>
+                <button onClick={() => setView('traits')} className={`flex-1 py-2 text-xs font-bold uppercase rounded ${view === 'traits' ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400'}`}>Trait Library</button>
+            </div>
+
+            {view === 'catalog' && (
+                <div className="flex-1 flex flex-col min-h-0">
+                    <div className="flex gap-2 mb-4">
+                        <div className="relative flex-1">
+                            <Search size={14} className="absolute top-2.5 left-2 text-gray-500"/>
+                            <input className="w-full bg-gray-800 border border-gray-700 rounded pl-8 py-1.5 text-sm text-white" placeholder="Search NPCs..." value={search} onChange={e => setSearch(e.target.value)}/>
+                        </div>
+                        <button onClick={() => openWindow('NPC_BUILDER', { onSave: (npc) => setNpcCatalog(prev => [...prev, npc]) }, 'Create NPC')} className="bg-green-700 hover:bg-green-600 text-white px-3 py-1 rounded text-xs font-bold flex items-center gap-1"><Plus size={14}/> New NPC</button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto grid grid-cols-2 lg:grid-cols-3 gap-3">
+                        {filteredNpcs.map(npc => (
+                            <div key={npc.id} className="bg-gray-800 border border-gray-700 rounded p-3 hover:border-indigo-500 transition-colors group relative">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-600 to-purple-700 flex items-center justify-center text-white font-bold">{npc.name.charAt(0)}</div>
+                                    <div>
+                                        <div className="font-bold text-white">{npc.name}</div>
+                                        <div className="text-[10px] text-gray-400">{npc.race} • {npc.role}</div>
+                                    </div>
+                                </div>
+                                {npc.traits && npc.traits.length > 0 && (
+                                    <div className="text-xs text-gray-500 italic truncate">{npc.traits[0]}</div>
+                                )}
+                                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100">
+                                    <button onClick={() => openWindow('NPC_BUILDER', { onSave: (updated) => setNpcCatalog(prev => prev.map(n => n.id === updated.id ? updated : n)), initialData: npc }, `Edit ${npc.name}`)} className="text-gray-400 hover:text-white p-1"><Pencil size={12}/></button>
+                                    <button onClick={() => deleteNpc(npc.id)} className="text-gray-400 hover:text-red-400 p-1"><Trash2 size={12}/></button>
+                                </div>
+                            </div>
+                        ))}
+                        {filteredNpcs.length === 0 && <div className="col-span-full text-center text-gray-600 text-sm italic mt-8">No NPCs found. Create one to get started!</div>}
+                    </div>
+                </div>
+            )}
+
+            {view === 'traits' && (
+                <div className="flex-1 flex flex-col min-h-0">
+                    <div className="bg-gray-900/60 border border-gray-700 rounded p-3 mb-4">
+                        <div className="text-xs uppercase text-gray-500 font-bold mb-2">Add New Trait</div>
+                        <div className="grid grid-cols-1 gap-2">
+                            <input className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white" placeholder="Trait description..." value={newTrait.text} onChange={e => setNewTrait({...newTrait, text: e.target.value})}/>
+                            <div className="flex gap-2">
+                                <select className="bg-gray-800 border border-gray-700 rounded p-2 text-xs text-white" value={newTrait.category} onChange={e => setNewTrait({...newTrait, category: e.target.value})}>
+                                    {NPC_TRAIT_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                </select>
+                                <input className="flex-1 bg-gray-800 border border-gray-700 rounded p-2 text-xs text-white" placeholder="Tags (comma separated)" value={newTrait.tags} onChange={e => setNewTrait({...newTrait, tags: e.target.value})}/>
+                                <button onClick={addTrait} className="bg-green-700 hover:bg-green-600 text-white text-xs px-3 rounded">Add</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex gap-2 mb-4">
+                        <input className="flex-1 bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white" placeholder="Search traits..." value={search} onChange={e => setSearch(e.target.value)}/>
+                        <select className="bg-gray-800 border border-gray-700 rounded p-2 text-xs text-white" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
+                            <option value="All">All Categories</option>
+                            {NPC_TRAIT_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                        </select>
+                    </div>
+                    <div className="flex-1 overflow-y-auto space-y-2">
+                        {filteredTraits.map(trait => (
+                            <div key={trait.id} className="bg-gray-800 border border-gray-700 rounded p-2 group hover:border-gray-600 flex justify-between items-start">
+                                <div>
+                                    <div className="text-sm text-white">{trait.text}</div>
+                                    <div className="flex gap-2 mt-1">
+                                        <span className="text-[10px] bg-indigo-900/50 text-indigo-300 px-1 rounded">{trait.category}</span>
+                                        {trait.tags && <span className="text-[10px] text-gray-500">{trait.tags}</span>}
+                                    </div>
+                                </div>
+                                <button onClick={() => deleteTrait(trait.id)} className="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 p-1"><Trash2 size={12}/></button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const NPCBuilderWindow = ({ onSave, initialData, npcTraits, close }) => {
+    const [data, setData] = useState(initialData || {
+        id: Date.now(),
+        name: '',
+        race: 'Human',
+        role: '',
+        personality: '',
+        goal: '',
+        secret: '',
+        traits: [],
+        notes: ''
+    });
+
+    const [selectedCategory, setSelectedCategory] = useState('Appearance');
+
+    const getRandomTrait = (category) => {
+        const categoryTraits = npcTraits.filter(t => t.category === category);
+        if (categoryTraits.length === 0) return null;
+        return categoryTraits[Math.floor(Math.random() * categoryTraits.length)];
+    };
+
+    const addRandomTrait = () => {
+        const trait = getRandomTrait(selectedCategory);
+        if (trait) {
+            setData(prev => ({ ...prev, traits: [...prev.traits, trait.text] }));
+        }
+    };
+
+    const generateFullNpc = () => {
+        const newTraits = [];
+        ['Appearance', 'Mannerism', 'Voice', 'Quirk'].forEach(cat => {
+            const t = getRandomTrait(cat);
+            if (t) newTraits.push(t.text);
+        });
+        const goalTrait = getRandomTrait('Goal');
+        const secretTrait = getRandomTrait('Secret');
+        const nameTrait = getRandomTrait('Name');
+
+        setData(prev => ({
+            ...prev,
+            traits: newTraits,
+            goal: goalTrait?.text || prev.goal,
+            secret: secretTrait?.text || prev.secret,
+            name: nameTrait?.text || prev.name
+        }));
+    };
+
+    const removeTrait = (idx) => {
+        setData(prev => ({ ...prev, traits: prev.traits.filter((_, i) => i !== idx) }));
+    };
+
+    const handleSave = () => {
+        onSave(data);
+        close();
+    };
+
+    return (
+        <div className="h-full flex flex-col gap-4">
+            <div className="flex gap-4 flex-1 overflow-y-auto">
+                <div className="flex-1 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-xs uppercase text-gray-500 font-bold">Name</label>
+                            <input className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white" value={data.name} onChange={e => setData({...data, name: e.target.value})} placeholder="NPC Name"/>
+                        </div>
+                        <div>
+                            <label className="text-xs uppercase text-gray-500 font-bold">Race/Ancestry</label>
+                            <input className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white" value={data.race} onChange={e => setData({...data, race: e.target.value})} placeholder="Human, Elf, etc."/>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="text-xs uppercase text-gray-500 font-bold">Role / Occupation</label>
+                        <input className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white" value={data.role} onChange={e => setData({...data, role: e.target.value})} placeholder="Merchant, Guard, etc."/>
+                    </div>
+                    <div>
+                        <label className="text-xs uppercase text-gray-500 font-bold">Personality</label>
+                        <input className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white" value={data.personality} onChange={e => setData({...data, personality: e.target.value})} placeholder="Gruff, kind, suspicious..."/>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-xs uppercase text-gray-500 font-bold">Goal</label>
+                            <textarea className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white resize-none h-20" value={data.goal} onChange={e => setData({...data, goal: e.target.value})} placeholder="What do they want?"/>
+                        </div>
+                        <div>
+                            <label className="text-xs uppercase text-gray-500 font-bold">Secret</label>
+                            <textarea className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white resize-none h-20" value={data.secret} onChange={e => setData({...data, secret: e.target.value})} placeholder="What are they hiding?"/>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="text-xs uppercase text-gray-500 font-bold">Notes</label>
+                        <textarea className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white resize-none h-24" value={data.notes} onChange={e => setData({...data, notes: e.target.value})} placeholder="Additional notes..."/>
+                    </div>
+                </div>
+
+                <div className="w-64 bg-gray-900/50 border border-gray-800 rounded p-3">
+                    <div className="flex justify-between items-center mb-3">
+                        <span className="text-xs uppercase text-gray-500 font-bold">Traits</span>
+                        <button onClick={generateFullNpc} className="bg-purple-700 hover:bg-purple-600 text-white text-[10px] px-2 py-1 rounded flex items-center gap-1"><Wand2 size={10}/> Generate</button>
+                    </div>
+                    <div className="flex gap-1 mb-3">
+                        <select className="flex-1 bg-gray-800 border border-gray-700 rounded text-xs p-1 text-white" value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)}>
+                            {NPC_TRAIT_CATEGORIES.filter(c => !['Name', 'Goal', 'Secret', 'Backstory'].includes(c)).map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                        </select>
+                        <button onClick={addRandomTrait} className="bg-indigo-700 hover:bg-indigo-600 text-white text-xs px-2 rounded"><Shuffle size={12}/></button>
+                    </div>
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {data.traits.map((trait, idx) => (
+                            <div key={idx} className="bg-gray-800 border border-gray-700 rounded p-2 text-xs text-gray-300 flex justify-between items-start group">
+                                <span>{trait}</span>
+                                <button onClick={() => removeTrait(idx)} className="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100"><X size={12}/></button>
+                            </div>
+                        ))}
+                        {data.traits.length === 0 && <div className="text-xs text-gray-600 italic text-center">No traits added</div>}
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex justify-end gap-2 flex-shrink-0">
+                <button onClick={close} className="px-4 py-2 rounded border border-gray-600 text-gray-400 hover:text-white">Cancel</button>
+                <button onClick={handleSave} className="px-4 py-2 rounded bg-green-700 hover:bg-green-600 text-white font-bold flex items-center gap-2"><Save size={16}/> Save NPC</button>
+            </div>
+        </div>
+    );
+};
+
+const CombatWindowContent = ({ openWindow, party, bestiary, fear, setFear }) => {
+    const [view, setView] = useState('setup');
+    const [combatants, setCombatants] = useState([]);
+    const [round, setRound] = useState(1);
+    const [currentTurn, setCurrentTurn] = useState(0);
+
+    const addPartyToCombat = () => {
+        const partyMembers = party.map(pc => ({
+            id: `pc_${pc.id}_${Date.now()}`,
+            name: pc.name,
+            type: 'pc',
+            hp: pc.hp,
+            maxHp: pc.maxHp,
+            stress: pc.stress,
+            maxStress: pc.maxStress,
+            initiative: 0,
+            conditions: [],
+            isPlayer: true
+        }));
+        setCombatants(prev => [...prev, ...partyMembers]);
+    };
+
+    const addEnemies = (enemies) => {
+        const newEnemies = enemies.map((enemy, idx) => ({
+            id: `enemy_${enemy.id}_${Date.now()}_${idx}`,
+            name: enemies.filter(e => e.name === enemy.name).length > 1 ? `${enemy.name} ${idx + 1}` : enemy.name,
+            type: 'enemy',
+            hp: parseInt(enemy.hp) || 1,
+            maxHp: parseInt(enemy.hp) || 1,
+            stress: parseInt(enemy.stress) || 0,
+            maxStress: parseInt(enemy.stress) || 0,
+            initiative: 0,
+            conditions: [],
+            isPlayer: false,
+            data: enemy
+        }));
+        setCombatants(prev => [...prev, ...newEnemies]);
+    };
+
+    const updateCombatant = (id, field, value) => {
+        setCombatants(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c));
+    };
+
+    const removeCombatant = (id) => {
+        setCombatants(prev => prev.filter(c => c.id !== id));
+    };
+
+    const sortByInitiative = () => {
+        setCombatants(prev => [...prev].sort((a, b) => b.initiative - a.initiative));
+    };
+
+    const rollInitiative = () => {
+        setCombatants(prev => prev.map(c => ({
+            ...c,
+            initiative: Math.floor(Math.random() * 20) + 1 + (c.isPlayer ? 0 : -1)
+        })).sort((a, b) => b.initiative - a.initiative));
+    };
+
+    const nextTurn = () => {
+        if (combatants.length === 0) return;
+        const nextIdx = (currentTurn + 1) % combatants.length;
+        if (nextIdx === 0) setRound(r => r + 1);
+        setCurrentTurn(nextIdx);
+    };
+
+    const prevTurn = () => {
+        if (combatants.length === 0) return;
+        const prevIdx = currentTurn === 0 ? combatants.length - 1 : currentTurn - 1;
+        if (currentTurn === 0 && round > 1) setRound(r => r - 1);
+        setCurrentTurn(prevIdx);
+    };
+
+    const startCombat = () => {
+        if (combatants.length === 0) return;
+        rollInitiative();
+        setView('tracker');
+        setRound(1);
+        setCurrentTurn(0);
+    };
+
+    const endCombat = () => {
+        if (window.confirm("End combat? This will clear all combatants.")) {
+            setCombatants([]);
+            setView('setup');
+            setRound(1);
+            setCurrentTurn(0);
+        }
+    };
+
+    return (
+        <div className="h-full flex flex-col">
+            <div className="flex gap-2 mb-4">
+                <button onClick={() => setView('setup')} className={`flex-1 py-2 text-xs font-bold uppercase rounded ${view === 'setup' ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400'}`}>Setup</button>
+                <button onClick={() => setView('tracker')} className={`flex-1 py-2 text-xs font-bold uppercase rounded ${view === 'tracker' ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-400'}`}>Tracker</button>
+            </div>
+
+            {view === 'setup' && (
+                <div className="flex-1 flex flex-col gap-4 overflow-y-auto">
+                    <div className="flex gap-2">
+                        <button onClick={addPartyToCombat} className="flex-1 bg-blue-700 hover:bg-blue-600 text-white py-2 rounded text-sm font-bold flex items-center justify-center gap-2"><Users size={16}/> Add Party</button>
+                        <button onClick={() => openWindow('BESTIARY_PICKER', { onPick: addEnemies }, 'Add Enemies')} className="flex-1 bg-red-700 hover:bg-red-600 text-white py-2 rounded text-sm font-bold flex items-center justify-center gap-2"><Skull size={16}/> Add Enemies</button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto space-y-2">
+                        {combatants.map(c => (
+                            <div key={c.id} className={`flex items-center gap-3 p-2 rounded border ${c.isPlayer ? 'bg-blue-900/20 border-blue-800' : 'bg-red-900/20 border-red-800'}`}>
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${c.isPlayer ? 'bg-blue-700' : 'bg-red-700'}`}>{c.name.charAt(0)}</div>
+                                <div className="flex-1">
+                                    <div className="font-bold text-sm">{c.name}</div>
+                                    <div className="text-[10px] text-gray-400">{c.isPlayer ? 'Player' : c.data?.type || 'Enemy'}</div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs text-gray-500">Init:</span>
+                                    <input type="number" className="w-12 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-sm text-center" value={c.initiative} onChange={e => updateCombatant(c.id, 'initiative', parseInt(e.target.value) || 0)}/>
+                                </div>
+                                <button onClick={() => removeCombatant(c.id)} className="text-gray-500 hover:text-red-400"><X size={16}/></button>
+                            </div>
+                        ))}
+                        {combatants.length === 0 && <div className="text-center text-gray-600 text-sm italic mt-8">No combatants added. Add party members or enemies to begin.</div>}
+                    </div>
+
+                    <div className="flex gap-2">
+                        <button onClick={rollInitiative} disabled={combatants.length === 0} className="flex-1 bg-purple-700 hover:bg-purple-600 disabled:bg-gray-800 disabled:text-gray-600 text-white py-2 rounded text-sm font-bold">Roll Initiative</button>
+                        <button onClick={startCombat} disabled={combatants.length === 0} className="flex-1 bg-green-700 hover:bg-green-600 disabled:bg-gray-800 disabled:text-gray-600 text-white py-2 rounded text-sm font-bold flex items-center justify-center gap-2"><Play size={16}/> Start Combat</button>
+                    </div>
+                </div>
+            )}
+
+            {view === 'tracker' && (
+                <div className="flex-1 flex flex-col gap-4 overflow-hidden">
+                    <div className="flex justify-between items-center bg-gray-900 p-3 rounded border border-gray-800">
+                        <div className="flex items-center gap-4">
+                            <div><span className="text-xs text-gray-500 uppercase">Round</span><div className="text-2xl font-bold text-white">{round}</div></div>
+                            <div className="flex items-center gap-2 bg-purple-900/30 px-3 py-1 rounded border border-purple-800">
+                                <Skull size={16} className="text-purple-400"/>
+                                <span className="text-xs text-gray-400">Fear:</span>
+                                <button onClick={() => setFear(Math.max(0, fear - 1))} className="text-gray-500 hover:text-white">-</button>
+                                <span className="text-lg font-bold text-purple-400">{fear}</span>
+                                <button onClick={() => setFear(fear + 1)} className="text-gray-500 hover:text-white">+</button>
+                            </div>
+                        </div>
+                        <div className="flex gap-2">
+                            <button onClick={prevTurn} className="bg-gray-800 hover:bg-gray-700 text-white p-2 rounded"><ArrowLeft size={16}/></button>
+                            <button onClick={nextTurn} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded font-bold flex items-center gap-2"><SkipForward size={16}/> Next</button>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto space-y-2">
+                        {combatants.map((c, idx) => (
+                            <div key={c.id} className={`p-3 rounded border transition-all ${idx === currentTurn ? 'combat-row-active border-indigo-500 bg-indigo-900/20' : c.isPlayer ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-800/50 border-gray-700'}`}>
+                                <div className="flex items-center gap-3">
+                                    <div className="text-lg font-bold text-gray-500 w-6">{c.initiative}</div>
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${c.isPlayer ? 'bg-blue-700' : 'bg-red-700'} ${c.hp <= 0 ? 'opacity-50' : ''}`}>{c.name.charAt(0)}</div>
+                                    <div className="flex-1">
+                                        <div className={`font-bold ${c.hp <= 0 ? 'line-through text-gray-500' : ''}`}>{c.name}</div>
+                                        <div className="flex gap-4 mt-1">
+                                            <div className="flex items-center gap-1">
+                                                <span className="text-[10px] text-red-400">HP</span>
+                                                <button onClick={() => updateCombatant(c.id, 'hp', Math.max(0, c.hp - 1))} className="text-gray-500 hover:text-white text-xs">-</button>
+                                                <span className="text-sm font-bold">{c.hp}/{c.maxHp}</span>
+                                                <button onClick={() => updateCombatant(c.id, 'hp', Math.min(c.maxHp, c.hp + 1))} className="text-gray-500 hover:text-white text-xs">+</button>
+                                            </div>
+                                            {c.maxStress > 0 && (
+                                                <div className="flex items-center gap-1">
+                                                    <span className="text-[10px] text-purple-400">Stress</span>
+                                                    <button onClick={() => updateCombatant(c.id, 'stress', Math.max(0, c.stress - 1))} className="text-gray-500 hover:text-white text-xs">-</button>
+                                                    <span className="text-sm font-bold">{c.stress}/{c.maxStress}</span>
+                                                    <button onClick={() => updateCombatant(c.id, 'stress', Math.min(c.maxStress, c.stress + 1))} className="text-gray-500 hover:text-white text-xs">+</button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                    {!c.isPlayer && c.data && (
+                                        <div className="text-right text-xs text-gray-500">
+                                            <div>Diff: {c.data.difficulty}</div>
+                                            <div>Atk: {c.data.attack}</div>
+                                        </div>
+                                    )}
+                                    <button onClick={() => removeCombatant(c.id)} className="text-gray-600 hover:text-red-400 p-1"><X size={14}/></button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="flex gap-2">
+                        <button onClick={() => openWindow('BESTIARY_PICKER', { onPick: addEnemies }, 'Add Enemies')} className="bg-red-800 hover:bg-red-700 text-white px-3 py-2 rounded text-xs flex items-center gap-1"><Plus size={14}/> Add Enemies</button>
+                        <button onClick={endCombat} className="ml-auto bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm">End Combat</button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const SceneWindowContent = ({ node, nodes, setNodes, openWindow, savedEncounters, tables }) => {
+    const [activeTab, setActiveTab] = useState('details');
+    const nodeIndex = nodes.findIndex(n => n.id === node.id);
+
+    const updateNode = (field, value) => {
+        setNodes(prev => prev.map(n => n.id === node.id ? { ...n, [field]: value } : n));
+    };
+
+    const deleteNode = () => {
+        if (window.confirm("Delete this scene?")) {
+            setNodes(prev => prev.filter(n => n.id !== node.id));
+        }
+    };
+
+    return (
+        <div className="h-full flex flex-col">
+            <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-700">
+                <input
+                    className="text-xl font-bold text-white bg-transparent border-b border-transparent hover:border-gray-600 focus:border-indigo-500 outline-none"
+                    value={node.title}
+                    onChange={e => updateNode('title', e.target.value)}
+                />
+                <button onClick={deleteNode} className="text-gray-500 hover:text-red-400"><Trash2 size={16}/></button>
+            </div>
+
+            <div className="flex gap-2 mb-4">
+                {['details', 'encounters', 'npcs'].map(t => (
+                    <button key={t} onClick={() => setActiveTab(t)} className={`flex-1 py-1 text-xs font-bold uppercase rounded ${activeTab === t ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}>
+                        {t}
+                    </button>
+                ))}
+            </div>
+
+            {activeTab === 'details' && (
+                <div className="flex-1 flex flex-col gap-4 overflow-y-auto">
+                    <div>
+                        <label className="text-xs uppercase font-bold text-gray-500">Description</label>
+                        <textarea
+                            className="w-full h-32 bg-gray-900 border border-gray-700 rounded p-2 text-sm text-gray-300 resize-none focus:outline-none focus:border-indigo-500"
+                            value={node.desc}
+                            onChange={e => updateNode('desc', e.target.value)}
+                            placeholder="What happens in this scene..."
+                        />
+                    </div>
+                    <div>
+                        <label className="text-xs uppercase font-bold text-gray-500">Skill Checks</label>
+                        <textarea
+                            className="w-full h-20 bg-gray-900 border border-gray-700 rounded p-2 text-sm text-gray-300 resize-none focus:outline-none focus:border-indigo-500"
+                            value={(node.skillChecks || []).join('\n')}
+                            onChange={e => updateNode('skillChecks', e.target.value.split('\n'))}
+                            placeholder="List skill checks (one per line)..."
+                        />
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'encounters' && (
+                <div className="flex-1 flex flex-col gap-4 overflow-y-auto">
+                    <button
+                        onClick={() => {
+                            const encounter = savedEncounters[Math.floor(Math.random() * savedEncounters.length)];
+                            if (encounter) {
+                                updateNode('enemies', [...(node.enemies || []), { id: Date.now(), name: encounter.name, difficulty: encounter.difficulty }]);
+                            }
+                        }}
+                        className="bg-red-700 hover:bg-red-600 text-white py-2 rounded text-sm font-bold"
+                    >
+                        Add Random Encounter
+                    </button>
+                    <div className="space-y-2">
+                        {(node.enemies || []).map(enemy => (
+                            <div key={enemy.id} className="bg-gray-800 border border-gray-700 rounded p-2 flex justify-between items-center">
+                                <div>
+                                    <div className="font-bold text-sm">{enemy.name}</div>
+                                    <div className="text-[10px] text-red-400">{enemy.difficulty}</div>
+                                </div>
+                                <button onClick={() => updateNode('enemies', (node.enemies || []).filter(e => e.id !== enemy.id))} className="text-gray-500 hover:text-red-400"><Trash2 size={14}/></button>
+                            </div>
+                        ))}
+                        {(node.enemies || []).length === 0 && <div className="text-center text-gray-600 text-xs italic">No encounters in this scene.</div>}
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'npcs' && (
+                <div className="flex-1 flex flex-col gap-4 overflow-y-auto">
+                    <div className="space-y-2">
+                        {(node.npcs || []).map(npc => (
+                            <div key={npc.id} className="bg-gray-800 border border-gray-700 rounded p-2 flex justify-between items-center">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-full bg-indigo-700 flex items-center justify-center font-bold text-sm">{npc.name.charAt(0)}</div>
+                                    <div>
+                                        <div className="font-bold text-sm">{npc.name}</div>
+                                        <div className="text-[10px] text-gray-400">{npc.role}</div>
+                                    </div>
+                                </div>
+                                <button onClick={() => updateNode('npcs', (node.npcs || []).filter(n => n.id !== npc.id))} className="text-gray-500 hover:text-red-400"><Trash2 size={14}/></button>
+                            </div>
+                        ))}
+                        {(node.npcs || []).length === 0 && <div className="text-center text-gray-600 text-xs italic">No NPCs in this scene.</div>}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 // --- APP ---
 
 export default function App() {
@@ -1761,6 +2475,8 @@ export default function App() {
         }
     };
 
+    const findNode = (nodeId) => nodes.find(n => n.id === nodeId);
+
     const renderContent = (type, data = {}) => {
         switch (type) {
             case 'TIMELINE': return <TimelineWidget activeSessionId={activeSessionId} setActiveSessionId={setActiveSessionId} sessions={sessions} setSessions={setSessions} nodes={nodes} setNodes={setNodes} openWindow={openWindow} />;
@@ -1775,6 +2491,14 @@ export default function App() {
             case 'BESTIARY': return <BestiaryWindowContent library={bestiary} setLibrary={setBestiary} openWindow={openWindow} />;
             case 'ADV_BUILDER': return <AdversaryBuilderWindow onSave={data.onSave} initialData={data.initialData} close={() => closeWindow(data.windowId)} />;
             case 'BESTIARY_PICKER': return <BestiaryPickerWindowContent library={bestiary} onPick={data.onPick} close={() => closeWindow(data.windowId)} />;
+            case 'TABLE_MANAGER': return <TableManagerWindowContent tables={tables} setTables={setTables} customTables={customTables} setCustomTables={setCustomTables} />;
+            case 'NPC_MANAGER': return <NPCManagerWindowContent npcCatalog={npcCatalog} setNpcCatalog={setNpcCatalog} npcTraits={npcTraits} setNpcTraits={setNpcTraits} openWindow={openWindow} />;
+            case 'NPC_BUILDER': return <NPCBuilderWindow onSave={data.onSave} initialData={data.initialData} npcTraits={npcTraits} close={() => closeWindow(data.windowId)} />;
+            case 'COMBAT': return <CombatWindowContent openWindow={openWindow} party={party} bestiary={bestiary} fear={fear} setFear={setFear} />;
+            case 'SCENE': {
+                const node = findNode(data.nodeId);
+                return node ? <SceneWindowContent node={node} nodes={nodes} setNodes={setNodes} openWindow={openWindow} savedEncounters={savedEncounters} tables={tables} /> : <div className="text-gray-500">Scene not found</div>;
+            }
             default: return <div className="p-4 text-gray-500">Widget: {type}</div>;
         }
     };
@@ -1806,9 +2530,10 @@ export default function App() {
                 })}
 
                 <div className="h-px w-8 bg-gray-700 my-2"></div>
+                <button onClick={() => openWindow('COMBAT', {}, 'Combat Tracker')} className="sidebar-btn hover:text-red-500" title="Combat Tracker"><Sword size={20}/></button>
                 <button onClick={() => openWindow('NPC_MANAGER', {}, 'NPC Catalog & Builder')} className="sidebar-btn hover:text-green-400" title="NPC Catalog"><User size={20}/></button>
                 <button onClick={() => openWindow('BESTIARY', {}, 'Adversary Bestiary')} className="sidebar-btn hover:text-red-400" title="Bestiary"><Skull size={20}/></button>
-                <button onClick={() => openWindow('ENCOUNTER_MANAGER', {}, 'Encounter Builder')} className="sidebar-btn hover:text-red-500" title="Encounter Builder"><Target size={20}/></button>
+                <button onClick={() => openWindow('ENCOUNTER_MANAGER', {}, 'Encounter Builder')} className="sidebar-btn hover:text-orange-500" title="Encounter Builder"><Target size={20}/></button>
                 <button onClick={() => openWindow('TABLE_MANAGER', {}, 'Table Generators')} className="sidebar-btn hover:text-yellow-400" title="Tables"><List size={20}/></button>
                 <div className="mt-auto">
                      <button onClick={backupCampaign} className="sidebar-btn hover:text-green-400" title="Backup Full Campaign"><Settings size={20}/></button>
